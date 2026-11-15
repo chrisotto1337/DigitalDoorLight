@@ -75,15 +75,19 @@ jobs:
           cache: npm
           cache-dependency-path: hub/package-lock.json
       - run: npm ci
+      # Die Datei enthaelt nur Verweise, die Werte kommen aus den Umgebungsvariablen.
+      # So legt der erste Deploy den Worker samt Secrets in einem Schritt an.
+      - name: Secrets-Datei vorbereiten
+        run: printf 'DEVICE_KEY=$DEVICE_KEY\nAPP_KEY=$APP_KEY\n' > .secrets.env
       - uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: hub
           packageManager: npm
-          secrets: |
-            DEVICE_KEY
-            APP_KEY
+          command: |
+            whoami
+            deploy --secrets-file .secrets.env
         env:
           DEVICE_KEY: ${{ secrets.HUB_DEVICE_KEY }}
           APP_KEY: ${{ secrets.HUB_APP_KEY }}

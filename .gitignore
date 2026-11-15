@@ -12,3 +12,5 @@ firmware/tools/fontwork/
 hub/node_modules/
 hub/.wrangler/
 hub/.dev.vars
+
+hub/.secrets.env

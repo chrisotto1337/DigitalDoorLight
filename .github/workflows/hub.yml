@@ -1,0 +1,89 @@
+# Hub: bei jeder Aenderung testen, von main aus zu Cloudflare bringen.
+#
+# Noetige Repository-Secrets (Settings > Secrets and variables > Actions):
+#   CLOUDFLARE_API_TOKEN   API-Token mit der Vorlage "Edit Cloudflare Workers"
+#   CLOUDFLARE_ACCOUNT_ID  Account-ID aus dem Cloudflare-Dashboard
+#   HUB_DEVICE_KEY         Schluessel des Displays
+#   HUB_APP_KEY            Schluessel der iPhone-App
+
+name: Hub
+
+on:
+  push:
+    paths:
+      - "hub/**"
+      - ".github/workflows/hub.yml"
+  pull_request:
+    paths:
+      - "hub/**"
+      - ".github/workflows/hub.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hub-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: hub
+
+jobs:
+  test:
+    name: Testen
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: hub/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  deploy:
+    name: Zu Cloudflare bringen
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Secrets pruefen
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          HUB_DEVICE_KEY: ${{ secrets.HUB_DEVICE_KEY }}
+          HUB_APP_KEY: ${{ secrets.HUB_APP_KEY }}
+        run: |
+          fehlt=0
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID HUB_DEVICE_KEY HUB_APP_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Repository-Secret $name fehlt. Anleitung: hub/README.md"
+              fehlt=1
+            fi
+          done
+          exit $fehlt
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: hub/package-lock.json
+      - run: npm ci
+      - uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: hub
+          packageManager: npm
+          secrets: |
+            DEVICE_KEY
+            APP_KEY
+        env:
+          DEVICE_KEY: ${{ secrets.HUB_DEVICE_KEY }}
+          APP_KEY: ${{ secrets.HUB_APP_KEY }}

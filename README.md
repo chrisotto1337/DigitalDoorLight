@@ -7,6 +7,8 @@ anfragen, ob er rein darf.
 ## Stand
 
 Meilenstein 1 von 8 ist erledigt: Das Display zeigt alle sechs Zustände, noch ohne WLAN und App.
+Meilenstein 2 ist gebaut und lokal getestet: der Hub in der Cloud. Er wartet auf die
+Einrichtung bei Cloudflare, siehe [hub/README.md](hub/README.md).
 
 ![Die sechs Screens](docs/m1-screens.png)
 
@@ -16,7 +18,7 @@ getestet am 15.11.2026: Anzeige, Tipp und Countdown laufen.
 | Nr. | Ziel | Stand |
 | --- | --- | --- |
 | M1 | Display zeigt alle Zustände | erledigt |
-| M2 | Cloud-Hub steht | offen |
+| M2 | Cloud-Hub steht | gebaut, Einrichtung bei Cloudflare offen |
 | M3 | Display hängt am Hub | offen |
 | M4 | iPhone-App steuert die Ampel | offen |
 | M5 | Anfrage bei offener App | offen |
@@ -75,10 +77,18 @@ firmware/
   src/fonts/            Erzeugte Schriften und Icons
   lib/LilyGo_AMOLED/    Display- und Touch-Treiber des Herstellers
   tools/make_fonts.sh   Erzeugt die Schriften neu
+hub/
+  src/index.ts          Worker: Adressen, Schlüsselprüfung, Testseite
+  src/door.ts           Durable Object: Zustand, Fristen, Verteilung
+  src/protocol.ts       Nachrichten und ihre Prüfung
+  test/smoke.mjs        Ablauftest gegen einen lokalen Hub
+  README.md             Einrichtung bei Cloudflare
+.github/workflows/      Tests und Ausrollen des Hubs
+docs/protokoll.md       Nachrichten zwischen Display, Hub und App
 docs/                   Bilder
 ```
 
-Hub und iPhone-App kommen ab M2 als eigene Ordner dazu.
+Die iPhone-App kommt mit M4 als eigener Ordner dazu.
 
 ## Verwendete Software
 
@@ -90,3 +100,4 @@ Hub und iPhone-App kommen ab M2 als eigene Ordner dazu.
 | Schrift [Space Grotesk](https://github.com/floriankarsten/space-grotesk) | SIL Open Font License 1.1 |
 | Schrift [Inter](https://github.com/rsms/inter) | SIL Open Font License 1.1 |
 | [Tabler Icons](https://github.com/tabler/tabler-icons) | MIT |
+| [Wrangler](https://github.com/cloudflare/workers-sdk) 4.162.0, nur zum Bauen | MIT oder Apache 2.0 |

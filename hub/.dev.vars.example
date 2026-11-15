@@ -1,0 +1,4 @@
+# Fuer "npm run dev": diese Datei nach .dev.vars kopieren und eigene Werte eintragen.
+# .dev.vars wird nicht ins Repository uebernommen.
+DEVICE_KEY=lokaler-display-schluessel
+APP_KEY=lokaler-app-schluessel

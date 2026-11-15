@@ -7,3 +7,8 @@ firmware/tools/fontwork/
 
 # macOS
 .DS_Store
+
+# Hub
+hub/node_modules/
+hub/.wrangler/
+hub/.dev.vars

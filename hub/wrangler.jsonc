@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tuerampel-hub",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": true,
+
+  // Ein einziges Durable Object haelt den Zustand der Tuer.
+  "durable_objects": {
+    "bindings": [{ "name": "DOOR", "class_name": "Door" }]
+  },
+  // Der kostenlose Cloudflare-Plan erlaubt nur Durable Objects mit SQLite-Speicher.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Door"] }],
+
+  "vars": {
+    // Wie lange eine Anfrage auf Antwort wartet, in Sekunden.
+    "ANFRAGE_FRIST_S": "30"
+  }
+
+  // Geheime Werte, nicht hier eintragen:
+  //   DEVICE_KEY  Schluessel des Displays
+  //   APP_KEY     Schluessel der iPhone-App
+  // Online setzt sie der GitHub-Workflow, lokal stehen sie in .dev.vars.
+}

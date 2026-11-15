@@ -6,16 +6,16 @@ anfragen, ob er rein darf.
 
 ## Stand
 
-Meilenstein 1 von 8: Das Display zeigt alle sechs Zustände, noch ohne WLAN und App.
+Meilenstein 1 von 8 ist erledigt: Das Display zeigt alle sechs Zustände, noch ohne WLAN und App.
 
 ![Die sechs Screens](docs/m1-screens.png)
 
-Das Bild stammt aus einem Rendering des Firmware-Codes am Rechner. Die Firmware
-kompiliert fehlerfrei, auf dem Gerät selbst ist sie noch nicht getestet.
+Das Bild stammt aus einem Rendering des Firmware-Codes am Rechner. Am Gerät
+getestet am 15.11.2026: Anzeige, Tipp und Countdown laufen.
 
 | Nr. | Ziel | Stand |
 | --- | --- | --- |
-| M1 | Display zeigt alle Zustände | in Arbeit, dieser Stand |
+| M1 | Display zeigt alle Zustände | erledigt |
 | M2 | Cloud-Hub steht | offen |
 | M3 | Display hängt am Hub | offen |
 | M4 | iPhone-App steuert die Ampel | offen |

@@ -166,8 +166,15 @@ class Client {
   }
 }
 
+// Verbindet und wartet die Begruessung des Hubs ab (status, bei Apps auch geraet),
+// damit sie nicht in spaetere Tests hineinlaeuft.
 async function client(name, rolle) {
-  return new Client(name).verbinden(rolle, rolle === "app" ? APP_KEY : DISPLAY_KEY);
+  const c = await new Client(name).verbinden(rolle, rolle === "app" ? APP_KEY : DISPLAY_KEY);
+  c.start = { status: await c.warte("status") };
+  if (rolle === "app") {
+    c.start.geraet = await c.warte("geraet");
+  }
+  return c;
 }
 
 // ---------- Tests ----------
@@ -214,10 +221,9 @@ async function main() {
   const appB = await client("App B", "app");
 
   await test("neue Verbindung bekommt Status und Geraet", async () => {
-    const s = await appA.warte("status");
-    assert.equal(s.farbe, "gruen");
-    const g = await appA.warte("geraet");
-    assert.equal(g.online, false);
+    assert.equal(appA.start.status.farbe, "gruen");
+    assert.equal(appA.start.geraet.online, false);
+    assert.equal(appB.start.status.farbe, "gruen");
   });
 
   await test("zwei Apps sehen Statuswechsel gegenseitig", async () => {
@@ -229,15 +235,14 @@ async function main() {
     assert.equal(a.farbe, "gelb");
     assert.equal(b.farbe, "gelb");
     assert.equal(b.bis, null);
+    assert.equal(a.seit, b.seit, "beide Apps muessen dieselbe Aenderung sehen");
   });
 
   const display = await client("Display", "display");
 
   await test("Display bekommt Status, Apps sehen es online", async () => {
-    const s = await display.warte("status");
-    assert.equal(s.farbe, "gelb");
-    const g = await appA.warte("geraet");
-    assert.equal(g.online, true);
+    assert.equal(display.start.status.farbe, "gelb");
+    await appA.warte("geraet", 5000, (g) => g.online === true);
   });
 
   await test("Display meldet Stromquelle", async () => {
@@ -337,7 +342,6 @@ async function main() {
 
   await test("neues Display ersetzt das alte", async () => {
     zweitesDisplay = await client("Display 2", "display");
-    await zweitesDisplay.warte("status");
     await new Promise((ok) => {
       if (display.ws.readyState === WebSocket.CLOSED) return ok();
       display.ws.addEventListener("close", ok);
@@ -365,8 +369,7 @@ async function main() {
 
   await test("Status ueberlebt einen Neustart", async () => {
     const app = await client("App nach Neustart", "app");
-    const s = await app.warte("status");
-    assert.equal(s.farbe, "gelb");
+    assert.equal(app.start.status.farbe, "gelb");
     await app.schliessen();
   });
 

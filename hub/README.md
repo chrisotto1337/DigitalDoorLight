@@ -17,6 +17,11 @@ anfordern (Adressleiste, "aA").
    Subdomain für `workers.dev`. Einen Namen wählen, zum Beispiel `chrisotto`.
    Der Hub ist später unter `https://tuerampel-hub.<subdomain>.workers.dev` erreichbar.
 3. Auf derselben Seite unter "Account Details" die **Account ID** kopieren.
+4. Den Worker einmal von Hand anlegen: In "Workers & Pages" eine neue Anwendung
+   erstellen, die Vorlage "Hello World" wählen, als Namen genau `tuerampel-hub`
+   eintragen und bereitstellen. Der Grund: Ein Token aus der Vorlage
+   "Edit Cloudflare Workers" darf vorhandene Worker aktualisieren, aber keine neuen
+   anlegen. Der erste Lauf des Workflows ersetzt "Hello World" durch den Hub.
 
 ### 2. API-Token
 

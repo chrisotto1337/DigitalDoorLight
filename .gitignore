@@ -1,0 +1,9 @@
+# PlatformIO
+.pio/
+.vscode/
+
+# Arbeitsordner von firmware/tools/make_fonts.sh
+firmware/tools/fontwork/
+
+# macOS
+.DS_Store

@@ -26,7 +26,7 @@ seit 1970 (Unix-Zeit), Farben sind `gruen`, `gelb` oder `rot`.
 
 | typ | Felder | Wirkung |
 | --- | --- | --- |
-| `status_setzen` | `farbe`, `dauer_s` (Sekunden oder `null`) | Setzt die Ampel. Mit `dauer_s` springt sie danach von selbst auf Grün. |
+| `status_setzen` | `farbe`, `dauer_s` (Sekunden oder `null`) | Setzt die Ampel. Mit `dauer_s` springt sie danach von selbst auf Grün. Bleibt die Farbe gleich, ändert sich nur die Dauer, `seit` bleibt stehen. |
 | `antwort` | `id`, `ja` (`true` oder `false`) | Beantwortet die laufende Anfrage. |
 
 ## Vom Display an den Hub

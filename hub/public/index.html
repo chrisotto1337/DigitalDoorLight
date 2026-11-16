@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Türampel</title>
+  <meta name="description" content="Steuert die Ampel an der Tür und beantwortet Anfragen.">
+  <meta name="theme-color" content="#F3F4F6" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0B0D10" media="(prefers-color-scheme: dark)">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Türampel">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/icon-180.png">
+  <link rel="preload" href="/fonts/space-grotesk-700.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/app.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <!-- Erster Start: Schlüssel eingeben -->
+  <main id="einrichtung" class="seite" hidden>
+    <h1 class="titel">Türampel</h1>
+    <p class="text">Gib einmal den App-Schlüssel ein. Er bleibt nur auf diesem Gerät gespeichert.</p>
+    <form id="schluessel-form" class="formular" novalidate>
+      <label for="schluessel" class="feldname">App-Schlüssel</label>
+      <input id="schluessel" name="schluessel" type="password" autocomplete="current-password"
+             autocapitalize="off" spellcheck="false" inputmode="text" required>
+      <p id="schluessel-fehler" class="fehler" role="alert" hidden></p>
+      <button type="submit" class="knopf knopf-voll">Verbinden</button>
+    </form>
+  </main>
+
+  <!-- Hauptansicht -->
+  <main id="haupt" class="seite" hidden>
+    <header class="kopf">
+      <h1 class="titel">Türampel</h1>
+      <p id="display-pille" class="pille" aria-live="polite">
+        <span class="punkt" aria-hidden="true"></span><span id="display-text">Verbinde</span>
+      </p>
+    </header>
+
+    <p id="verbindung-hinweis" class="hinweis" role="status" hidden>Keine Verbindung zum Hub. Ich verbinde neu.</p>
+    <p id="ton-hinweis" class="kleintext" hidden>Damit der Ton bei einer Anfrage spielt, einmal irgendwo tippen oder klicken.</p>
+
+    <section id="statuskarte" class="statuskarte" aria-live="polite">
+      <p class="statuskarte-zeile">Gerade an der Tür</p>
+      <p id="status-titel" class="statuskarte-titel">…</p>
+      <p id="status-zeit" class="statuskarte-zeile"></p>
+    </section>
+
+    <section aria-labelledby="setzen-titel">
+      <h2 id="setzen-titel" class="abschnitt">Status setzen</h2>
+      <div class="farbwahl">
+        <button type="button" class="farbe" data-farbe="gruen" aria-pressed="false">
+          <span class="scheibe scheibe-gruen" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-8.5"/></svg>
+          </span>
+          <span class="farbe-text"><span class="farbe-name">Frei</span><span class="farbe-info">Reinkommen ohne Fragen</span></span>
+          <svg class="haken" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.8"/></svg>
+        </button>
+        <button type="button" class="farbe" data-farbe="gelb" aria-pressed="false">
+          <span class="scheibe scheibe-gelb" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M9.2 9a3 3 0 1 1 4.5 2.6c-1 .6-1.7 1.3-1.7 2.6"/><path d="M12 18v.1"/></svg>
+          </span>
+          <span class="farbe-text"><span class="farbe-name">Bitte fragen</span><span class="farbe-info">Anfrage kommt auf dieses Gerät</span></span>
+          <svg class="haken" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.8"/></svg>
+        </button>
+        <button type="button" class="farbe" data-farbe="rot" aria-pressed="false">
+          <span class="scheibe scheibe-rot" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg>
+          </span>
+          <span class="farbe-text"><span class="farbe-name">Nicht stören</span><span class="farbe-info">Anfragen bleiben möglich</span></span>
+          <svg class="haken" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.8"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <section aria-labelledby="dauer-titel">
+      <h2 id="dauer-titel" class="abschnitt">Automatisch zurück auf Frei</h2>
+      <div class="dauerwahl" role="group" aria-labelledby="dauer-titel">
+        <button type="button" class="dauer" data-dauer="0" aria-pressed="false">Aus</button>
+        <button type="button" class="dauer" data-dauer="1800" aria-pressed="false">30 Min</button>
+        <button type="button" class="dauer" data-dauer="3600" aria-pressed="false">1 Std</button>
+        <button type="button" class="dauer" data-dauer="7200" aria-pressed="false">2 Std</button>
+      </div>
+    </section>
+
+    <details class="einstellungen">
+      <summary>Einstellungen</summary>
+      <div class="einstellung">
+        <label class="schalter">
+          <input id="ton-an" type="checkbox">
+          <span>Ton bei Anfrage</span>
+        </label>
+        <button id="ton-test" type="button" class="knopf knopf-klein">Ton testen</button>
+      </div>
+      <p class="kleintext">Der Ton spielt nur, solange die App offen ist.</p>
+      <div class="einstellung">
+        <span>Benachrichtigung bei Anfrage</span>
+        <button id="benachrichtigung" type="button" class="knopf knopf-klein">Erlauben</button>
+      </div>
+      <p id="benachrichtigung-info" class="kleintext">Hilft am PC, wenn die App in einem anderen Tab offen ist.</p>
+      <div class="einstellung">
+        <span>App-Schlüssel</span>
+        <button id="abmelden" type="button" class="knopf knopf-klein">Ändern</button>
+      </div>
+    </details>
+  </main>
+
+  <!-- Anfrage an der Tür -->
+  <div id="anfrage" class="anfrage" role="alertdialog" aria-modal="true"
+       aria-labelledby="anfrage-titel" aria-describedby="anfrage-info" hidden>
+    <div class="anfrage-inhalt">
+      <p class="pille pille-dunkel">Anfrage an der Tür</p>
+      <span class="scheibe scheibe-gelb scheibe-gross" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>
+      </span>
+      <h2 id="anfrage-titel" class="titel titel-gross">Jemand möchte rein</h2>
+      <p id="anfrage-info" class="text"></p>
+      <div class="balken" aria-hidden="true"><div id="anfrage-balken" class="balken-fuellung"></div></div>
+      <p id="anfrage-rest" class="kleintext"></p>
+    </div>
+    <div class="anfrage-knoepfe">
+      <button id="antwort-ja" type="button" class="knopf knopf-gross knopf-ja">Ja, herein</button>
+      <button id="antwort-nein" type="button" class="knopf knopf-gross knopf-nein">Jetzt nicht</button>
+    </div>
+  </div>
+
+  <p id="meldung" class="meldung" role="status" hidden></p>
+</body>
+</html>

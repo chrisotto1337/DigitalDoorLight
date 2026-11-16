@@ -11,7 +11,10 @@ Meilenstein 2 ist erledigt: Der Hub läuft unter
 https://tuerampel-hub.chris-otto.workers.dev, die Testseite unter `/test`.
 Einrichtung und Betrieb: [hub/README.md](hub/README.md).
 Meilenstein 3 ist erledigt: Das Display hängt am Hub und zeigt den Status, den die App
-setzt. Die Anfrage am Display aus M5 funktioniert schon, die App dazu kommt mit M4.
+setzt.
+Meilenstein 4 und 5 sind gebaut: Die App läuft unter
+https://tuerampel-hub.chris-otto.workers.dev auf dem iPhone und im Browser am PC und
+beantwortet Anfragen. Der Test am iPhone steht aus.
 
 ![Die sechs Screens](docs/m1-screens.png)
 
@@ -28,8 +31,8 @@ ohne Verbindung.
 | M1 | Display zeigt alle Zustände | erledigt |
 | M2 | Cloud-Hub steht | erledigt |
 | M3 | Display hängt am Hub | erledigt |
-| M4 | iPhone-App steuert die Ampel | offen |
-| M5 | Anfrage bei offener App | Display-Seite fertig, App offen |
+| M4 | iPhone-App steuert die Ampel | gebaut, Test am iPhone offen |
+| M5 | Anfrage bei offener App | gebaut, Test am iPhone offen |
 | M6 | Push-Mitteilung | offen |
 | M7 | Dauerbetrieb an der Tür | offen |
 | M8 | Akku als Puffer | offen |
@@ -106,6 +109,7 @@ hub/
   src/index.ts          Worker: Adressen, Schlüsselprüfung, Testseite
   src/door.ts           Durable Object: Zustand, Fristen, Verteilung
   src/protocol.ts       Nachrichten und ihre Prüfung
+  public/               Die App: HTML, JavaScript, CSS, Icons
   test/smoke.mjs        Ablauftest gegen einen lokalen Hub
   README.md             Einrichtung bei Cloudflare
 .github/workflows/      Tests und Ausrollen des Hubs
@@ -113,7 +117,7 @@ docs/protokoll.md       Nachrichten zwischen Display, Hub und App
 docs/                   Bilder
 ```
 
-Die iPhone-App kommt mit M4 als eigener Ordner dazu.
+Die App liegt in `hub/public`, der Hub liefert sie aus.
 
 ## Verwendete Software
 

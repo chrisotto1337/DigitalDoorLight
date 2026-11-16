@@ -51,14 +51,13 @@ async function verbinden(request: Request, env: Env, rolle: Rolle): Promise<Resp
   return tuer.fetch(new Request(request, { headers: kopf }));
 }
 
+// Die App selbst (/, /app.js, ...) liefert Cloudflare direkt aus public/ aus.
+// Dieser Worker bekommt nur Anfragen, zu denen es dort keine Datei gibt.
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
     switch (url.pathname) {
-      case "/":
-        return antwort("Tuerampel-Hub laeuft. Testseite: /test\n");
-
       case "/health":
         return antwort(JSON.stringify({ ok: true }), 200, "application/json");
 

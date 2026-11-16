@@ -21,6 +21,11 @@ const pruefungen = [
     assert.equal(r.status, 200);
     assert.deepEqual(await r.json(), { ok: true });
   }],
+  ["App wird ausgeliefert", async () => {
+    const r = await fetch(`${basis}/`);
+    assert.equal(r.status, 200);
+    assert.match(await r.text(), /Türampel/);
+  }],
   ["falscher Schluessel wird abgewiesen", async () => {
     const r = await fetch(`${basis}/ws/app?key=falsch`);
     assert.equal(r.status, 401);

@@ -209,6 +209,22 @@ async function main() {
     assert.equal(r.status, 426);
   });
 
+  await test("App wird ausgeliefert", async () => {
+    const r = await fetch(`${BASIS}/`);
+    assert.equal(r.status, 200);
+    assert.match(r.headers.get("content-type") ?? "", /text\/html/);
+    assert.match(r.headers.get("content-security-policy") ?? "", /default-src 'self'/);
+    assert.match(await r.text(), /Türampel/);
+    for (const datei of ["/app.js", "/app.css", "/sw.js", "/manifest.webmanifest", "/icons/icon-180.png"]) {
+      const d = await fetch(`${BASIS}${datei}`);
+      assert.equal(d.status, 200, datei);
+      await d.arrayBuffer();
+    }
+    const kopf = await fetch(`${BASIS}/_headers`);
+    assert.notEqual(kopf.status, 200, "_headers darf nicht oeffentlich sein");
+    await kopf.arrayBuffer();
+  });
+
   await test("Testseite wird ausgeliefert", async () => {
     const r = await fetch(`${BASIS}/test`);
     assert.equal(r.status, 200);
@@ -236,6 +252,18 @@ async function main() {
     assert.equal(b.farbe, "gelb");
     assert.equal(b.bis, null);
     assert.equal(a.seit, b.seit, "beide Apps muessen dieselbe Aenderung sehen");
+  });
+
+  await test("gleiche Farbe mit neuer Dauer behaelt seit", async () => {
+    appA.leeren();
+    appA.senden({ typ: "status_setzen", farbe: "gelb", dauer_s: 3600 });
+    const mitDauer = await appA.warte("status");
+    assert.equal(mitDauer.farbe, "gelb");
+    assert.ok(mitDauer.bis > Date.now());
+    appA.senden({ typ: "status_setzen", farbe: "gelb", dauer_s: null });
+    const ohneDauer = await appA.warte("status");
+    assert.equal(ohneDauer.seit, mitDauer.seit);
+    assert.equal(ohneDauer.bis, null);
   });
 
   const display = await client("Display", "display");

@@ -4,6 +4,17 @@ Ein Cloudflare Worker mit einem Durable Object. Er hält den Zustand der Türamp
 verteilt Änderungen in Echtzeit an Display und App und überwacht die Fristen.
 Die Nachrichten sind in [docs/protokoll.md](../docs/protokoll.md) beschrieben.
 
+Der Hub liefert auch die App aus: Die Dateien in `public/` stellt Cloudflare unter
+https://tuerampel-hub.chris-otto.workers.dev direkt bereit, ohne den Worker zu starten.
+
+| Datei | Inhalt |
+| --- | --- |
+| `public/index.html` | Aufbau der App |
+| `public/app.js` | Verbindung zum Hub, Anzeige, Hinweise bei Anfragen |
+| `public/app.css` | Gestaltung, hell und dunkel |
+| `public/sw.js` | Service Worker: schneller Start, Tipp auf Benachrichtigung |
+| `public/_headers` | Sicherheits-Header |
+
 ## Einmalige Einrichtung
 
 Danach bringt GitHub jede Änderung an `hub/` auf `main` automatisch zu Cloudflare.
@@ -66,6 +77,15 @@ ausgerollten Hub: Er antwortet, beide Schlüssel sind gesetzt, eine App-Verbindu
 bekommt den Status. Der Zustand der Ampel bleibt dabei unverändert. Fehlt ein Secret, bricht der Workflow
 mit einer Meldung ab, welches fehlt. Erneut starten geht unter Actions > Hub >
 "Run workflow".
+
+## Die App
+
+1. Auf dem iPhone in Safari https://tuerampel-hub.chris-otto.workers.dev öffnen.
+2. Teilen, dann "Zum Home-Bildschirm". Ab dann startet sie wie eine App.
+3. Den App-Schlüssel einmal eingeben.
+
+Am PC läuft dieselbe Adresse im Browser. Chrome und Edge bieten in der
+Adressleiste an, sie als App zu installieren.
 
 ## Ausprobieren
 

@@ -127,9 +127,11 @@ export class Door extends DurableObject<Env> {
   private async verarbeiten(ws: WebSocket, n: ClientNachricht, jetzt: number): Promise<void> {
     switch (n.typ) {
       case "status_setzen": {
+        const alt = this.zustand.status;
         this.zustand.status = {
           farbe: n.farbe,
-          seit: jetzt,
+          // "seit" meint die Farbe: Aendert sich nur die Dauer, bleibt die Zeit stehen.
+          seit: alt.farbe === n.farbe ? alt.seit : jetzt,
           bis: n.dauer_s === null || n.farbe === "gruen" ? null : jetzt + n.dauer_s * 1000,
         };
         await this.speichernUndPlanen();

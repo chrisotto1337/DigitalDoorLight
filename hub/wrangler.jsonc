@@ -4,6 +4,8 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-11-01",
   "workers_dev": true,
+  // Keine zusaetzlichen Vorschau-Adressen je Version: der Hub hat genau eine Adresse.
+  "preview_urls": false,
 
   // Ein einziges Durable Object haelt den Zustand der Tuer.
   "durable_objects": {

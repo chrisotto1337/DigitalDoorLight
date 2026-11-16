@@ -61,13 +61,15 @@ Vier Einträge, die Namen genau so:
 ### 5. Ausrollen
 
 Sobald die Änderung auf `main` liegt, läuft unter "Actions" der Workflow **Hub**:
-erst die Tests, dann "Zu Cloudflare bringen". Fehlt ein Secret, bricht der Workflow
+erst die Tests, dann "Zu Cloudflare bringen". Zum Schluss prüft `test/live.mjs` den
+ausgerollten Hub: Er antwortet, beide Schlüssel sind gesetzt, eine App-Verbindung
+bekommt den Status. Der Zustand der Ampel bleibt dabei unverändert. Fehlt ein Secret, bricht der Workflow
 mit einer Meldung ab, welches fehlt. Erneut starten geht unter Actions > Hub >
 "Run workflow".
 
 ## Ausprobieren
 
-Die Testseite `https://tuerampel-hub.<subdomain>.workers.dev/test` spielt App oder
+Die Testseite https://tuerampel-hub.chris-otto.workers.dev/test spielt App oder
 Display. Zwei Tabs oder iPhone und Rechner nebeneinander:
 
 1. Tab 1: Rolle "App", App-Schlüssel, Verbinden.

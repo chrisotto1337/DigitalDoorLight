@@ -7,8 +7,9 @@ anfragen, ob er rein darf.
 ## Stand
 
 Meilenstein 1 von 8 ist erledigt: Das Display zeigt alle sechs Zustände, noch ohne WLAN und App.
-Meilenstein 2 ist gebaut und lokal getestet: der Hub in der Cloud. Er wartet auf die
-Einrichtung bei Cloudflare, siehe [hub/README.md](hub/README.md).
+Meilenstein 2 ist ausgerollt: Der Hub läuft unter
+https://tuerampel-hub.chris-otto.workers.dev, die Testseite unter `/test`.
+Einrichtung und Betrieb: [hub/README.md](hub/README.md).
 
 ![Die sechs Screens](docs/m1-screens.png)
 
@@ -18,7 +19,7 @@ getestet am 15.11.2026: Anzeige, Tipp und Countdown laufen.
 | Nr. | Ziel | Stand |
 | --- | --- | --- |
 | M1 | Display zeigt alle Zustände | erledigt |
-| M2 | Cloud-Hub steht | gebaut, Einrichtung bei Cloudflare offen |
+| M2 | Cloud-Hub steht | ausgerollt, Test mit zwei Geräten offen |
 | M3 | Display hängt am Hub | offen |
 | M4 | iPhone-App steuert die Ampel | offen |
 | M5 | Anfrage bei offener App | offen |

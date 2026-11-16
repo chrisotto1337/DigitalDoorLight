@@ -76,18 +76,25 @@ jobs:
           cache-dependency-path: hub/package-lock.json
       - run: npm ci
       # Die Datei enthaelt nur Verweise, die Werte kommen aus den Umgebungsvariablen.
-      # So legt der erste Deploy den Worker samt Secrets in einem Schritt an.
+      # So kommen Code und Secrets in einem Schritt zu Cloudflare.
       - name: Secrets-Datei vorbereiten
         run: printf 'DEVICE_KEY=$DEVICE_KEY\nAPP_KEY=$APP_KEY\n' > .secrets.env
       - uses: cloudflare/wrangler-action@v4
+        id: deploy
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: hub
           packageManager: npm
-          command: |
-            whoami
-            deploy --secrets-file .secrets.env
+          command: deploy --secrets-file .secrets.env
         env:
           DEVICE_KEY: ${{ secrets.HUB_DEVICE_KEY }}
           APP_KEY: ${{ secrets.HUB_APP_KEY }}
+      - name: Live pruefen
+        env:
+          HUB_URL: ${{ steps.deploy.outputs.deployment-url }}
+          DEVICE_KEY: ${{ secrets.HUB_DEVICE_KEY }}
+          APP_KEY: ${{ secrets.HUB_APP_KEY }}
+        run: |
+          sleep 5
+          node test/live.mjs "$HUB_URL"

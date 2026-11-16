@@ -28,9 +28,11 @@ anfordern (Adressleiste, "aA").
 1. Im Cloudflare-Dashboard die Seite "Account API tokens" öffnen und
    "Create Token" wählen.
 2. Die Vorlage **Edit Cloudflare Workers** nehmen.
-3. Bei den Ressourcen nur das eigene Konto auswählen, dann "Continue to summary"
+3. Prüfen, dass bei den Berechtigungen für Workers **Edit** (Editor) steht, nicht nur
+   Read. Mit Leserechten scheitert das Ausrollen mit "No access to the specified resource".
+4. Bei den Ressourcen nur das eigene Konto auswählen, dann "Continue to summary"
    und "Create Token".
-4. Den Token kopieren. Cloudflare zeigt ihn nur einmal an.
+5. Den Token kopieren. Cloudflare zeigt ihn nur einmal an.
 
 ### 3. Zwei Schlüssel erzeugen
 

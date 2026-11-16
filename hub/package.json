@@ -6,8 +6,9 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
-    "test": "node test/webpush.mjs && node test/smoke.mjs",
-    "test:push": "node test/webpush.mjs"
+    "test": "node test/webpush.mjs && node test/nacht.mjs && node test/smoke.mjs",
+    "test:push": "node test/webpush.mjs",
+    "test:nacht": "node test/nacht.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261115.1",

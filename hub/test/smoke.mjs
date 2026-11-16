@@ -2,13 +2,15 @@
 // Aufruf: npm test   (braucht Node 22 oder neuer)
 
 import { spawn } from "node:child_process";
-import { createECDH, randomBytes, webcrypto } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { createECDH, createHash, randomBytes, webcrypto } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import ece from "http_ece";
+
+import { nachtStand } from "../src/nacht.ts";
 
 const PORT = 8799;
 const BASIS = `http://127.0.0.1:${PORT}`;
@@ -19,6 +21,23 @@ const FRIST_S = 2;
 
 const speicher = mkdtempSync(join(tmpdir(), "tuerampel-hub-"));
 let server = null;
+
+// Firmware fuer das Update: eine Attrappe, falls kein echter Build daliegt
+const FIRMWARE_DATEI = new URL("../public/firmware/tuerampel.bin", import.meta.url);
+const FIRMWARE_ATTRAPPE = !existsSync(FIRMWARE_DATEI);
+if (FIRMWARE_ATTRAPPE) {
+  mkdirSync(new URL(".", FIRMWARE_DATEI), { recursive: true });
+  writeFileSync(FIRMWARE_DATEI, randomBytes(50_000));
+}
+const FIRMWARE = readFileSync(FIRMWARE_DATEI);
+const FIRMWARE_MD5 = createHash("md5").update(FIRMWARE).digest("hex");
+const FIRMWARE_VERSION = "test-1";
+
+function aufraeumen() {
+  pushServer.close();
+  rmSync(speicher, { recursive: true, force: true });
+  if (FIRMWARE_ATTRAPPE) rmSync(FIRMWARE_DATEI, { force: true });
+}
 
 // ---------- Nachgebauter Push-Dienst ----------
 // Der Hub darf im Test an 127.0.0.1 pushen (PUSH_LOKAL_ERLAUBT).
@@ -127,6 +146,8 @@ async function serverStarten() {
       "--var", `APP_KEY:${APP_KEY}`,
       "--var", `ANFRAGE_FRIST_S:${FRIST_S}`,
       "--var", "PUSH_LOKAL_ERLAUBT:1",
+      "--var", `FIRMWARE_VERSION:${FIRMWARE_VERSION}`,
+      "--var", `FIRMWARE_MD5:${FIRMWARE_MD5}`,
       "--show-interactive-dev-session=false",
     ],
     {
@@ -212,6 +233,26 @@ class Client {
     }
   }
 
+  // Alle Nachrichten bis einschliesslich der ersten vom Typ, zum Beispiel die Begruessung.
+  bisZu(typ, ms = 5000) {
+    return new Promise((ok, fehler) => {
+      const pruefen = () => {
+        const index = this.posteingang.findIndex((n) => n.typ === typ);
+        if (index >= 0) {
+          clearInterval(takt);
+          clearTimeout(timer);
+          ok(this.posteingang.splice(0, index + 1));
+        }
+      };
+      const takt = setInterval(pruefen, 10);
+      const timer = setTimeout(() => {
+        clearInterval(takt);
+        fehler(new Error(`${this.name}: keine Nachricht "${typ}" nach ${ms} ms`));
+      }, ms);
+      pruefen();
+    });
+  }
+
   // Wartet auf die naechste Nachricht des Typs, die die Bedingung erfuellt.
   // Aeltere Nachrichten davor werden verworfen.
   warte(typ, ms = 5000, bedingung = () => true) {
@@ -254,11 +295,23 @@ class Client {
 // damit sie nicht in spaetere Tests hineinlaeuft.
 async function client(name, rolle) {
   const c = await new Client(name).verbinden(rolle, rolle === "app" ? APP_KEY : DISPLAY_KEY);
-  c.start = { status: await c.warte("status") };
-  if (rolle === "app") {
-    c.start.push = await c.warte("push_schluessel");
-    c.start.geraet = await c.warte("geraet");
+  // Begruessung: status, laufende anfrage, nacht, dann an das Display firmware,
+  // an die App push_schluessel und geraet
+  const gruss = await c.bisZu(rolle === "app" ? "geraet" : "firmware");
+  c.start = {};
+  for (const n of gruss) {
+    if (n.typ === "anfrage") {
+      // Bleibt im Posteingang, Tests warten darauf
+      c.posteingang.unshift(n);
+    } else {
+      c.start[n.typ === "push_schluessel" ? "push" : n.typ] = n;
+    }
   }
+  assert.deepEqual(
+    gruss.map((n) => n.typ).filter((t) => t !== "anfrage"),
+    rolle === "app" ? ["status", "nacht", "push_schluessel", "geraet"] : ["status", "nacht", "firmware"],
+    `${name}: Begruessung in falscher Reihenfolge`,
+  );
   return c;
 }
 
@@ -547,6 +600,101 @@ async function main() {
     await display.warte("abbruch");
   });
 
+  // ---------- Firmware ----------
+
+  await test("Display bekommt die Firmware angeboten", async () => {
+    assert.deepEqual(display.start.firmware, { typ: "firmware", version: FIRMWARE_VERSION, md5: FIRMWARE_MD5 });
+    assert.equal(appA.start.geraet.firmware_neu, FIRMWARE_VERSION);
+  });
+
+  await test("Firmware nur mit Display-Schluessel", async () => {
+    const pfad = `${BASIS}/firmware/tuerampel.bin`;
+    assert.equal((await fetch(pfad)).status, 401);
+    assert.equal((await fetch(`${pfad}?key=${APP_KEY}`)).status, 401);
+    const r = await fetch(`${pfad}?key=${DISPLAY_KEY}`);
+    assert.equal(r.status, 200);
+    assert.equal(r.headers.get("x-md5"), FIRMWARE_MD5);
+    assert.equal(r.headers.get("content-length"), String(FIRMWARE.length));
+    assert.equal(r.headers.get("content-type"), "application/octet-stream");
+    assert.deepEqual(Buffer.from(await r.arrayBuffer()), FIRMWARE);
+    assert.equal((await fetch(`${BASIS}/firmware/anderes.bin?key=${DISPLAY_KEY}`)).status, 404);
+    assert.equal((await fetch(pfad + `?key=${DISPLAY_KEY}`, { method: "POST" })).status, 405);
+  });
+
+  await test("Display meldet seine Firmware", async () => {
+    appA.leeren();
+    display.senden({ typ: "geraet", strom: "usb", akku_prozent: null, firmware: "abc1234+lokal" });
+    const g = await appA.warte("geraet", 5000, (n) => n.firmware === "abc1234+lokal");
+    assert.equal(g.firmware_neu, FIRMWARE_VERSION);
+    display.leeren();
+    display.senden({ typ: "geraet", strom: "usb", akku_prozent: null, firmware: "kaputt version" });
+    assert.match((await display.warte("fehler")).grund, /firmware/);
+  });
+
+  // ---------- Nachtruhe ----------
+
+  await test("Begruessung enthaelt die Nachtruhe", async () => {
+    for (const n of [appA.start.nacht, display.start.nacht]) {
+      assert.equal(n.an, true);
+      assert.equal(n.von, "22:00");
+      assert.equal(n.bis, "07:00");
+      assert.equal(n.zeitzone, "Europe/Berlin");
+      const erwartet = nachtStand(n, Date.now());
+      assert.equal(n.aktiv, erwartet.aktiv);
+    }
+  });
+
+  await test("Nachtruhe pruefen", async () => {
+    const gut = { typ: "nacht_setzen", an: true, von: "22:00", bis: "07:00", zeitzone: "Europe/Berlin" };
+    appA.leeren();
+    for (const [falsch, muster] of [
+      [{ von: "22:00", bis: "22:00" }, /gleich/],
+      [{ von: "25:00" }, /Uhrzeit/],
+      [{ zeitzone: "Mars/Basis" }, /zeitzone/],
+      [{ an: "ja" }, /an muss/],
+    ]) {
+      appA.senden({ ...gut, ...falsch });
+      assert.match((await appA.warte("fehler")).grund, muster);
+    }
+    display.leeren();
+    display.senden(gut);
+    assert.match((await display.warte("fehler")).grund, /nicht erlaubt/);
+  });
+
+  await test("Nachtruhe setzen erreicht App und Display", async () => {
+    appB.leeren();
+    display.leeren();
+    appA.senden({ typ: "nacht_setzen", an: false, von: "21:30", bis: "06:15", zeitzone: "America/New_York" });
+    for (const c of [appB, display]) {
+      const n = await c.warte("nacht");
+      assert.deepEqual(
+        { an: n.an, von: n.von, bis: n.bis, zeitzone: n.zeitzone, aktiv: n.aktiv, wechsel: n.wechsel },
+        { an: false, von: "21:30", bis: "06:15", zeitzone: "America/New_York", aktiv: false, wechsel: null },
+      );
+    }
+  });
+
+  await test("Wechsel in die Nacht kommt von selbst", async () => {
+    // Nacht ab der naechsten vollen Minute, in UTC
+    if (60_000 - (Date.now() % 60_000) < 5000) await new Promise((ok) => setTimeout(ok, 5000));
+    const minute = Math.floor(Date.now() / 60_000) % 1440;
+    const uhr = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+    const von = uhr((minute + 1) % 1440);
+    const bis = uhr((minute + 3) % 1440);
+    display.leeren();
+    appA.senden({ typ: "nacht_setzen", an: true, von, bis, zeitzone: "UTC" });
+    const vorher = await display.warte("nacht");
+    assert.equal(vorher.aktiv, false);
+    assert.equal(vorher.wechsel, (Math.floor(Date.now() / 60_000) + 1) * 60_000);
+    const nachher = await display.warte("nacht", 70_000, (n) => n.aktiv === true);
+    assert.ok(Date.now() >= vorher.wechsel, "zu frueh gewechselt");
+    assert.ok(Date.now() - vorher.wechsel < 10_000, "zu spaet gewechselt");
+    assert.equal(nachher.wechsel, vorher.wechsel + 2 * 60_000);
+    // Fuer den Rest: wieder die Standardwerte
+    appA.senden({ typ: "nacht_setzen", an: true, von: "22:00", bis: "07:00", zeitzone: "Europe/Berlin" });
+    await display.warte("nacht", 5000, (n) => n.von === "22:00");
+  });
+
   await test("Status mit Dauer springt auf Gruen zurueck", async () => {
     appA.leeren();
     appA.senden({ typ: "status_setzen", farbe: "rot", dauer_s: 2 });
@@ -596,12 +744,13 @@ async function main() {
     const app = await client("App nach Neustart", "app");
     assert.equal(app.start.status.farbe, "gelb");
     assert.equal(app.start.push.schluessel, pushSchluessel, "Push-Schluessel muss bleiben");
+    assert.equal(app.start.geraet.firmware, "abc1234+lokal", "Firmware des Displays muss bleiben");
+    assert.equal(app.start.nacht.von, "22:00");
     await app.schliessen();
   });
 
   await serverStoppen();
-  pushServer.close();
-  rmSync(speicher, { recursive: true, force: true });
+  aufraeumen();
 
   const fehler = ergebnisse.filter(([ok]) => !ok).length;
   console.log(`\n${ergebnisse.length - fehler} von ${ergebnisse.length} Tests bestanden.`);
@@ -610,8 +759,7 @@ async function main() {
 
 main().catch(async (e) => {
   console.error(e);
-  pushServer.close();
   await serverStoppen();
-  rmSync(speicher, { recursive: true, force: true });
+  aufraeumen();
   process.exit(1);
 });

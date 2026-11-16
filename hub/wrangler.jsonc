@@ -8,8 +8,12 @@
   "preview_urls": false,
 
   // Die iPhone- und PC-App: statische Dateien, direkt von Cloudflare ausgeliefert.
+  // Ausnahme: Die Firmware unter /firmware/ geht erst durch den Worker, der den
+  // Display-Schluessel prueft. Sie entsteht beim Ausrollen und liegt nicht im Repository.
   "assets": {
-    "directory": "./public"
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/firmware/*"]
   },
 
   // Ein einziges Durable Object haelt den Zustand der Tuer.
@@ -28,4 +32,5 @@
   //   DEVICE_KEY  Schluessel des Displays
   //   APP_KEY     Schluessel der iPhone-App
   // Online setzt sie der GitHub-Workflow, lokal stehen sie in .dev.vars.
+  // FIRMWARE_VERSION und FIRMWARE_MD5 setzt der Workflow beim Ausrollen.
 }

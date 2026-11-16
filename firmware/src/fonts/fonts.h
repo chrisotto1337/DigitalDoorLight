@@ -28,3 +28,4 @@ LV_FONT_DECLARE(font_icon_22);
 #define ICON_CLOCK    "\xEE\xA9\xB0"  // U+EA70 clock
 #define ICON_WIFI     "\xEE\xAD\x92"  // U+EB52 wifi
 #define ICON_WIFI_OFF "\xEE\xB3\xBA"  // U+ECFA wifi-off
+#define ICON_DOWNLOAD "\xEE\xAA\x96"  // U+EA96 download

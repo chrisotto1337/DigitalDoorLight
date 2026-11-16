@@ -17,6 +17,8 @@ https://tuerampel-hub.chris-otto.workers.dev auf dem iPhone und im Browser am PC
 steuert die Ampel und beantwortet Anfragen. Anfragen kommen als Push-Mitteilung, auch
 bei geschlossener App. Einschalten: [hub/README.md](hub/README.md#mitteilungen).
 Am iPhone getestet am 16.11.2026.
+Meilenstein 7 ist gebaut: Nachtruhe, Pixelversatz und Updates über WLAN. Der Test am
+Gerät steht aus.
 
 ![Die sechs Screens](docs/m1-screens.png)
 
@@ -36,7 +38,7 @@ ohne Verbindung.
 | M4 | iPhone-App steuert die Ampel | erledigt |
 | M5 | Anfrage bei offener App | erledigt |
 | M6 | Push-Mitteilung | erledigt |
-| M7 | Dauerbetrieb an der Tür | offen |
+| M7 | Dauerbetrieb an der Tür | gebaut, Test am Gerät offen |
 | M8 | Akku als Puffer | offen |
 
 ## Hardware
@@ -60,6 +62,15 @@ ohne Verbindung.
 
 Auf der Kommandozeile geht dasselbe mit `pio run -t upload` im Ordner `firmware`.
 
+Beim ersten Start speichert das Board WLAN und Display-Schlüssel aus `secrets.h` in
+seinem Flash. Danach braucht es kein Kabel mehr: Jede Änderung an `firmware/` auf
+`main` baut GitHub, der Hub bietet sie an, das Display holt sie sich über WLAN. Die
+Firmware von GitHub enthält keine Geheimnisse, das Board nimmt seine gespeicherten.
+
+Ein eigener Build mit nicht eingecheckten Änderungen heißt zum Beispiel
+`a1b2c3d4e5+lokal`. So eine Firmware ersetzt das Board nicht von selbst, bis wieder
+eine saubere Fassung per Kabel draufkommt.
+
 ## Was die Firmware tut
 
 - Nach dem Start erscheint "Verbinde mit dem WLAN", dann "mit dem Hub". Sobald der
@@ -73,6 +84,14 @@ Auf der Kommandozeile geht dasselbe mit `pio run -t upload` im Ordner `firmware`
   "Keine Antwort". Nach 6 Sekunden oder einem Tipp kehrt das Display zum Status zurück.
 - Ohne Verbindung zeigt das Symbol oben rechts ein durchgestrichenes WLAN, das Feld
   unten sagt "Offline, bitte klopfen". Die Verbindung baut sich von selbst neu auf.
+- Nachtruhe: In der Zeit, die in der App eingestellt ist, standardmäßig 22 bis 7 Uhr,
+  bleibt das Display dunkel. Der erste Tipp weckt es für 10 Sekunden, erst der zweite
+  fragt an. Während einer Anfrage bleibt es an.
+- Gegen Einbrennen wandert der Inhalt alle 2 Minuten um 4 Pixel.
+- Bietet der Hub eine neue Firmware an, lädt das Display sie, sobald keine Anfrage
+  läuft, und startet neu. Am Tag zeigt es dabei "Update" mit Fortschritt, nachts
+  bleibt es dunkel. Erreicht die neue Firmware den Hub nicht binnen 5 Minuten, kehrt
+  das Board zur alten zurück. Nach drei Fehlschlägen lässt es diese Version aus.
 
 ## Wenn etwas nicht klappt
 
@@ -90,6 +109,13 @@ Auf der Kommandozeile geht dasselbe mit `pio run -t upload` im Ordner `firmware`
 - **Bleibt bei "Verbinde mit dem Hub":** Meist stimmt der Display-Schlüssel nicht.
   Der serielle Monitor zeigt dann wiederholt "[hub] getrennt".
 - **Fehler beim Bauen "secrets.h fehlt":** Schritt 3 unter "Firmware aufspielen".
+- **Zeigt "WLAN-Daten fehlen":** Das Board hat noch nie eine Firmware mit `secrets.h`
+  bekommen. Einmal per Kabel aufspielen.
+- **Neues WLAN oder neuer Schlüssel:** `secrets.h` anpassen und einmal per Kabel
+  aufspielen, das Board überschreibt dann die gespeicherten Werte.
+- **Update kommt nicht an:** In der App unter Einstellungen zeigt "Firmware", welche
+  Version läuft und welche der Hub anbietet. Der serielle Monitor zeigt Zeilen mit
+  "[ota]".
 
 ## Aufbau des Repositories
 
@@ -101,20 +127,26 @@ firmware/
   include/secrets.example.h  Vorlage für WLAN und Display-Schlüssel
   include/lv_conf.h     LVGL-Konfiguration
   src/main.cpp          Start, BOOT-Taster
-  src/controller.cpp    Ablauf: Status, Anfrage, Antwort, Offline
+  src/controller.cpp    Ablauf: Status, Anfrage, Antwort, Offline, Nacht, Update
   src/hub_client.cpp    WLAN und WebSocket zum Hub
+  src/credentials.cpp   WLAN und Schlüssel im Flash des Boards
+  src/ota.cpp           Update über WLAN mit Rückfall auf die alte Firmware
+  src/panel.cpp         Display an, aus, Helligkeit
   src/ui.cpp, ui.h      Die Screens
   src/fonts/            Erzeugte Schriften und Icons
   lib/LilyGo_AMOLED/    Display- und Touch-Treiber des Herstellers
   tools/make_fonts.sh   Erzeugt die Schriften neu
+  tools/version.py      Setzt die Firmware-Version aus git
 hub/
   src/index.ts          Worker: Adressen, Schlüsselprüfung, Testseite
   src/door.ts           Durable Object: Zustand, Fristen, Verteilung
   src/protocol.ts       Nachrichten und ihre Prüfung
+  src/nacht.ts          Nachtruhe: Tag oder Nacht, nächster Wechsel
+  src/webpush.ts        Push-Mitteilungen
   public/               Die App: HTML, JavaScript, CSS, Icons
-  test/smoke.mjs        Ablauftest gegen einen lokalen Hub
+  test/                 Push, Nachtruhe, Ablauftest, Prüfung nach dem Ausrollen
   README.md             Einrichtung bei Cloudflare
-.github/workflows/      Tests und Ausrollen des Hubs
+.github/workflows/      Tests, Firmware bauen, Hub mit Firmware ausrollen
 docs/protokoll.md       Nachrichten zwischen Display, Hub und App
 docs/                   Bilder
 ```

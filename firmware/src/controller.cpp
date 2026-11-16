@@ -2,9 +2,13 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <lvgl.h>
 
 #include "config.h"
+#include "credentials.h"
 #include "hub_client.h"
+#include "ota.h"
+#include "panel.h"
 #include "ui.h"
 
 namespace controller {
@@ -32,6 +36,22 @@ uint32_t requestEndMs = 0;
 bool cancelWhenConfirmed = false;
 
 const char *shownDetail = nullptr;
+
+credentials::Values access;
+
+// Nachtruhe: der Hub sagt, ob gerade Nacht ist. Nachts bleibt das Display
+// dunkel, ein Tipp weckt es fuer WAKE_MS.
+bool nightActive = false;
+uint32_t awakeUntilMs = 0;
+
+// Pixelversatz gegen Einbrennen, im Kreis um die Mitte
+constexpr int8_t SHIFT_STEPS[][2] = {{0, 0},  {1, 0},  {1, 1},   {0, 1}, {-1, 1},
+                                     {-1, 0}, {-1, -1}, {0, -1}, {1, -1}};
+constexpr uint8_t SHIFT_STEP_COUNT = sizeof(SHIFT_STEPS) / sizeof(SHIFT_STEPS[0]);
+uint8_t shiftStep = 0;
+uint32_t lastShiftMs = 0;
+
+bool updating = false;
 
 ui::Screen screenForColor(const char *color) {
     if (strcmp(color, "gelb") == 0) {
@@ -95,6 +115,68 @@ void cancelRequest() {
     showStatus();
 }
 
+// ---------- Display an und aus ----------
+
+void keepAwake() {
+    awakeUntilMs = millis() + config::WAKE_MS;
+}
+
+// Nachts dunkel, ausser jemand hat gerade getippt oder eine Anfrage laeuft.
+void updatePanel() {
+    if (overlay != Overlay::None) {
+        keepAwake();
+    }
+    const bool dark =
+        nightActive && static_cast<int32_t>(awakeUntilMs - millis()) <= 0;
+    if (panel::isOn() == dark) {
+        panel::setOn(!dark);
+    }
+}
+
+void updateShift() {
+    const uint32_t now = millis();
+    if (!panel::isOn() || now - lastShiftMs < config::PIXEL_SHIFT_INTERVAL_MS) {
+        return;
+    }
+    lastShiftMs = now;
+    shiftStep = (shiftStep + 1) % SHIFT_STEP_COUNT;
+    ui::setShift(SHIFT_STEPS[shiftStep][0] * config::PIXEL_SHIFT_PX,
+                 SHIFT_STEPS[shiftStep][1] * config::PIXEL_SHIFT_PX);
+}
+
+// ---------- Update ueber WLAN ----------
+
+void onUpdateProgress(uint32_t done, uint32_t total) {
+    // Nur neu zeichnen, wenn sich die Prozentzahl aendert: das kostet Zeit.
+    if (panel::isOn() && ui::setProgress(done, total)) {
+        lv_refr_now(nullptr);
+    }
+}
+
+void startUpdate() {
+    updating = true;
+    // Nachts laeuft das Update im Dunkeln.
+    if (panel::isOn()) {
+        ui::show(ui::Screen::Updating);
+        ui::setProgress(0, 1);
+        lv_refr_now(nullptr);
+    }
+    ota::run(access.deviceKey, onUpdateProgress);
+    // Nur bei einem Fehler geht es hier weiter, sonst startet das Board neu.
+    updating = false;
+    showStatus();
+}
+
+void sendDeviceInfo() {
+    JsonDocument message;
+    message["typ"] = "geraet";
+    // Bis M8 haengt das Display immer am USB-Netzteil.
+    message["strom"] = "usb";
+    message["akku_prozent"] = nullptr;
+    message["firmware"] = ota::version();
+    hub::send(message);
+}
+
 // ---------- Nachrichten vom Hub ----------
 
 void onMessage(JsonDocument &message) {
@@ -132,6 +214,11 @@ void onMessage(JsonDocument &message) {
             clearRequest();
             showStatus();
         }
+    } else if (strcmp(type, "nacht") == 0) {
+        nightActive = message["aktiv"] | false;
+        updatePanel();
+    } else if (strcmp(type, "firmware") == 0) {
+        ota::offer(message["version"] | "", message["md5"] | "");
     } else if (strcmp(type, "fehler") == 0) {
         Serial.printf("[ampel] Hub meldet: %s\n", message["grund"] | "");
         // Eine abgelehnte Anfrage, etwa weil die Ampel inzwischen auf Gruen steht
@@ -144,6 +231,11 @@ void onMessage(JsonDocument &message) {
 
 void onConnection(bool connected) {
     ui::setOnline(connected);
+    if (connected) {
+        // Erreicht eine frisch installierte Firmware den Hub, ist sie gut.
+        ota::confirm();
+        sendDeviceInfo();
+    }
     if (!connected && overlay == Overlay::Requesting) {
         // Ohne Hub kann keine Antwort kommen. Nach dem Neuverbinden meldet der
         // Hub eine noch laufende Anfrage von selbst.
@@ -155,6 +247,17 @@ void onConnection(bool connected) {
 // ---------- Touch ----------
 
 void onTap(ui::Tap where) {
+    if (updating) {
+        return;
+    }
+    if (!panel::isOn()) {
+        // Nachts weckt der erste Tipp nur. Erst der zweite fragt an.
+        keepAwake();
+        updatePanel();
+        return;
+    }
+    keepAwake();
+
     switch (ui::current()) {
         case ui::Screen::Ask:
         case ui::Screen::Busy:
@@ -172,6 +275,7 @@ void onTap(ui::Tap where) {
             break;
         case ui::Screen::Free:
         case ui::Screen::Connecting:
+        case ui::Screen::Updating:
             break;
     }
 }
@@ -182,7 +286,9 @@ void updateConnectingDetail() {
     if (hasStatus) {
         return;
     }
-    const char *detail = hub::wifiConnected() ? "mit dem Hub" : "mit dem WLAN";
+    const char *detail = !credentials::complete(access) ? "WLAN-Daten fehlen"
+                         : hub::wifiConnected()          ? "mit dem Hub"
+                                                         : "mit dem WLAN";
     if (detail != shownDetail) {
         shownDetail = detail;
         ui::setConnectingDetail(detail);
@@ -216,13 +322,19 @@ void updateOverlay() {
 
 void begin() {
     ui::init(onTap);
-    hub::begin(onMessage, onConnection);
+    access = credentials::load();
+    hub::begin(access, onMessage, onConnection);
 }
 
 void loop() {
     hub::loop();
     updateConnectingDetail();
     updateOverlay();
+    updatePanel();
+    updateShift();
+    if (overlay == Overlay::None && hub::connected() && ota::due()) {
+        startUpdate();
+    }
 }
 
 void tap() {

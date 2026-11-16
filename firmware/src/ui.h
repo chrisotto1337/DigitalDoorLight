@@ -14,6 +14,7 @@ enum class Screen : uint8_t {
     Granted,     // Antwort Ja: Herein!
     Denied,      // Antwort Nein: Jetzt nicht
     NoAnswer,    // Frist abgelaufen: Keine Antwort
+    Updating,    // Update ueber WLAN, mit Fortschritt
 };
 
 // Wo getippt wurde: irgendwo auf dem Display oder auf das Feld unten.
@@ -32,6 +33,12 @@ Screen current();
 
 // Countdown auf dem Screen "Anfrage laeuft".
 void setCountdown(uint32_t remainingMs, uint32_t totalMs);
+
+// Fortschritt auf dem Screen "Update". true, wenn sich die Anzeige geaendert hat.
+bool setProgress(uint32_t done, uint32_t total);
+
+// Verschiebt den ganzen Inhalt um einige Pixel, gegen Einbrennen.
+void setShift(int32_t dx, int32_t dy);
 
 // WLAN-Symbol oben rechts.
 void setOnline(bool online);

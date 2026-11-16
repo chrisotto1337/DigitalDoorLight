@@ -1,5 +1,6 @@
 // Nachrichten zwischen Display, Hub und App. Beschreibung: docs/protokoll.md
 
+import { istUhrzeit, istZeitzone, type NachtEinstellung } from "./nacht";
 import { erlaubterEndpunkt, type PushAbo } from "./webpush";
 
 export type Rolle = "display" | "app";
@@ -19,7 +20,8 @@ export type ClientNachricht =
   | { typ: "antwort"; id: string; ja: boolean }
   | { typ: "anfrage" }
   | { typ: "abbruch"; id: string }
-  | { typ: "geraet"; strom: Strom; akku_prozent: number | null }
+  | { typ: "geraet"; strom: Strom; akku_prozent: number | null; firmware: string | null }
+  | ({ typ: "nacht_setzen" } & NachtEinstellung)
   | { typ: "push_anmelden"; abo: PushAbo }
   | { typ: "push_abmelden"; endpoint: string }
   | { typ: "push_test"; endpoint: string; verzoegerung_s: number };
@@ -30,6 +32,7 @@ const ERLAUBT: Record<ClientNachricht["typ"], Rolle> = {
   anfrage: "display",
   abbruch: "display",
   geraet: "display",
+  nacht_setzen: "app",
   push_anmelden: "app",
   push_abmelden: "app",
   push_test: "app",
@@ -52,7 +55,12 @@ export type HubNachricht =
       zuletzt: number | null;
       strom: Strom | null;
       akku_prozent: number | null;
+      // Firmware auf dem Display und die, die der Hub zum Update anbietet
+      firmware: string | null;
+      firmware_neu: string | null;
     }
+  | ({ typ: "nacht"; aktiv: boolean; wechsel: number | null } & NachtEinstellung)
+  | { typ: "firmware"; version: string; md5: string }
   | { typ: "push_schluessel"; schluessel: string }
   | { typ: "push_status"; endpoint: string; aktiv: boolean }
   | { typ: "push_ergebnis"; ok: boolean; grund: string | null }
@@ -71,6 +79,11 @@ function istObjekt(wert: unknown): wert is Record<string, unknown> {
 
 function istId(wert: unknown): wert is string {
   return typeof wert === "string" && wert.length > 0 && wert.length <= MAX_ID_LAENGE;
+}
+
+// Kennung einer Firmware, etwa "a1b2c3d" oder "a1b2c3d+lokal"
+export function istFirmwareVersion(wert: unknown): wert is string {
+  return typeof wert === "string" && /^[A-Za-z0-9._+-]{1,40}$/.test(wert);
 }
 
 // base64url ohne Auffuellung, mit genau dieser Laenge
@@ -172,7 +185,29 @@ export function pruefeNachricht(
       ) {
         return { ok: false, grund: "akku_prozent muss null oder 0 bis 100 sein" };
       }
-      return { ok: true, nachricht: { typ, strom: daten.strom, akku_prozent: akku } };
+      const firmware = daten.firmware ?? null;
+      if (firmware !== null && !istFirmwareVersion(firmware)) {
+        return { ok: false, grund: "firmware muss null oder eine Versionskennung sein" };
+      }
+      return { ok: true, nachricht: { typ, strom: daten.strom, akku_prozent: akku, firmware } };
+    }
+    case "nacht_setzen": {
+      if (typeof daten.an !== "boolean") {
+        return { ok: false, grund: "an muss true oder false sein" };
+      }
+      if (!istUhrzeit(daten.von) || !istUhrzeit(daten.bis)) {
+        return { ok: false, grund: "von und bis muessen Uhrzeiten wie 22:00 sein" };
+      }
+      if (daten.von === daten.bis) {
+        return { ok: false, grund: "von und bis duerfen nicht gleich sein" };
+      }
+      if (!istZeitzone(daten.zeitzone)) {
+        return { ok: false, grund: "zeitzone ist unbekannt" };
+      }
+      return {
+        ok: true,
+        nachricht: { typ, an: daten.an, von: daten.von, bis: daten.bis, zeitzone: daten.zeitzone },
+      };
     }
     case "push_anmelden": {
       // Format von PushSubscription.toJSON()

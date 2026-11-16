@@ -11,7 +11,7 @@ namespace config {
 // Hochformat: 1 oder 3. Steht das Bild auf dem Kopf, den anderen Wert nehmen.
 constexpr uint8_t DISPLAY_ROTATION = 1;
 
-// Helligkeit von 0 bis 255.
+// Helligkeit von 0 bis 255. Mehr laesst das AMOLED schneller altern.
 constexpr uint8_t DISPLAY_BRIGHTNESS = 200;
 
 // Taster auf der Platine (BOOT). Wirkt wie ein Tipp auf das Display.
@@ -40,5 +40,23 @@ constexpr uint32_t REQUEST_ACK_TIMEOUT_MS = 5000;
 
 // Wie lange "Herein!", "Jetzt nicht" oder "Keine Antwort" stehen bleiben.
 constexpr uint32_t ANSWER_SHOW_MS = 6000;
+
+// ---------- Dauerbetrieb ----------
+
+// Nachtruhe: So lange bleibt das Display nach einem Tipp hell. Die Zeiten
+// stellt man in der App ein.
+constexpr uint32_t WAKE_MS = 10000;
+
+// Gegen Einbrennen wandert der Inhalt in diesem Takt um einige Pixel.
+constexpr uint32_t PIXEL_SHIFT_INTERVAL_MS = 120000;
+constexpr int32_t PIXEL_SHIFT_PX = 4;
+
+// Update ueber WLAN: nach einem Fehlschlag erst nach dieser Zeit neu versuchen.
+constexpr uint32_t OTA_RETRY_MS = 30UL * 60 * 1000;
+
+// Erreicht eine neue Firmware den Hub nicht in dieser Zeit, kehrt das Board
+// zur alten zurueck. Nach drei Fehlschlaegen laesst es diese Version aus.
+constexpr uint32_t OTA_VERIFY_TIMEOUT_MS = 5UL * 60 * 1000;
+constexpr uint8_t OTA_MAX_FAILURES = 3;
 
 }  // namespace config

@@ -44,6 +44,7 @@ let status = null; // { farbe, seit, bis }
 let geraet = null; // { online, ... }
 let anfrage = null; // { id, endeLokal }
 let verbunden = false;
+let nacht = null; // { an, von, bis, zeitzone, aktiv, wechsel }
 
 // ---------- Kurze Meldung ----------
 
@@ -119,12 +120,83 @@ function zeigeVerbindung() {
     $("display-text").textContent = "Keine Verbindung";
   } else if (geraet?.online) {
     pille.classList.add("online");
-    $("display-text").textContent = "Display online";
+    $("display-text").textContent = nacht?.aktiv ? "Display schläft" : "Display online";
   } else {
     $("display-text").textContent = "Display offline";
   }
   for (const knopf of document.querySelectorAll(".farbe, .dauer")) {
     knopf.disabled = !verbunden;
+  }
+  zeigeNacht();
+}
+
+// ---------- Nachtruhe und Firmware ----------
+
+const GERAETE_ZEITZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+// erzwingen: auch das Feld zuruecksetzen, in dem gerade jemand waehlt
+function zeigeNacht(erzwingen = false) {
+  const an = $("nacht-an");
+  const von = $("nacht-von");
+  const bis = $("nacht-bis");
+  const info = $("nacht-info");
+  const bereit = verbunden && nacht !== null;
+  an.disabled = !bereit;
+  von.disabled = !bereit || !nacht?.an;
+  bis.disabled = !bereit || !nacht?.an;
+  if (!nacht) {
+    info.textContent = "";
+    return;
+  }
+  an.checked = nacht.an;
+  // Nicht dazwischenfunken, solange jemand die Uhrzeit waehlt
+  if (erzwingen || document.activeElement !== von) von.value = nacht.von;
+  if (erzwingen || document.activeElement !== bis) bis.value = nacht.bis;
+
+  let text;
+  if (!nacht.an) {
+    text = "Aus. Das Display bleibt immer hell.";
+  } else if (nacht.aktiv) {
+    text = `Das Display schläft bis ${nacht.bis}. Ein Tipp weckt es für 10 Sekunden.`;
+  } else {
+    text = `Dunkel ab ${nacht.von}. Ein Tipp weckt es dann für 10 Sekunden.`;
+  }
+  // Die Uhrzeiten gelten an der Tür, nicht dort, wo das Handy gerade ist.
+  if (nacht.zeitzone !== GERAETE_ZEITZONE) text += ` Uhrzeiten in ${nacht.zeitzone}.`;
+  info.textContent = text;
+}
+
+function nachtSenden() {
+  if (!nacht) return;
+  const an = $("nacht-an").checked;
+  const von = $("nacht-von").value;
+  const bis = $("nacht-bis").value;
+  if (!/^\d\d:\d\d$/.test(von) || !/^\d\d:\d\d$/.test(bis)) {
+    melde("Bitte von und bis wählen");
+    zeigeNacht(true);
+    return;
+  }
+  if (von === bis) {
+    melde("Von und bis müssen sich unterscheiden");
+    zeigeNacht(true);
+    return;
+  }
+  // Die Zeitzone der Tür bleibt, auch wenn das Handy woanders ist.
+  if (!sende({ typ: "nacht_setzen", an, von, bis, zeitzone: nacht.zeitzone })) zeigeNacht(true);
+}
+
+function zeigeFirmware() {
+  const el = $("firmware-text");
+  const aktuell = geraet?.firmware ?? null;
+  const neu = geraet?.firmware_neu ?? null;
+  if (!aktuell) {
+    el.textContent = "unbekannt";
+  } else if (!neu || aktuell === neu) {
+    el.textContent = neu ? `${aktuell}, aktuell` : aktuell;
+  } else if (aktuell.endsWith("+lokal")) {
+    el.textContent = `${aktuell}, eigener Build`;
+  } else {
+    el.textContent = `${aktuell}, Update auf ${neu} folgt`;
   }
 }
 
@@ -461,6 +533,11 @@ function empfange(text) {
     case "geraet":
       geraet = n;
       zeigeVerbindung();
+      zeigeFirmware();
+      break;
+    case "nacht":
+      nacht = n;
+      zeigeVerbindung();
       break;
     case "anfrage":
       anfrageOeffnen(n);
@@ -584,6 +661,7 @@ function abmelden(fehlertext) {
   speicher.schreib("schluessel", null);
   status = null;
   geraet = null;
+  nacht = null;
   zeigeSeite("einrichtung");
   const fehler = $("schluessel-fehler");
   fehler.textContent = fehlertext ?? "";
@@ -670,6 +748,9 @@ function einrichten() {
     zeigePush();
   });
   $("push-test").addEventListener("click", pushTesten);
+  for (const id of ["nacht-an", "nacht-von", "nacht-bis"]) {
+    $(id).addEventListener("change", nachtSenden);
+  }
 
   $("abmelden").addEventListener("click", () => abmelden());
 

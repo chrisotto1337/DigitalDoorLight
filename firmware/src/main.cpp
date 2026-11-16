@@ -1,17 +1,16 @@
-// Tuerampel, Meilenstein 3: das Display haengt am Hub.
+// Tuerampel, Meilenstein 7: Dauerbetrieb an der Tuer.
 //
-// Es zeigt den Status, den die App setzt. Ein Tipp bei Gelb oder Rot schickt
-// eine Anfrage, die Antwort erscheint auf dem Display. Ohne Verbindung zeigt
-// das Symbol oben rechts ein durchgestrichenes WLAN.
+// Das Display zeigt den Status, den die App setzt. Ein Tipp bei Gelb oder Rot
+// schickt eine Anfrage, die Antwort erscheint auf dem Display. Nachts bleibt es
+// dunkel, bis jemand tippt. Neue Firmware kommt ueber WLAN vom Hub.
 
 #include <Arduino.h>
 #include <LV_Helper.h>
-#include <LilyGo_AMOLED.h>
 
 #include "config.h"
 #include "controller.h"
-
-static LilyGo_Class amoled;
+#include "ota.h"
+#include "panel.h"
 
 static bool buttonWasDown = false;
 static uint32_t buttonChangedMs = 0;
@@ -34,26 +33,26 @@ void setup() {
     Serial.setTxTimeoutMs(0);
 
     pinMode(config::BUTTON_PIN, INPUT_PULLUP);
+    ota::begin();
 
-    if (!amoled.begin()) {
+    if (!panel::begin()) {
         while (true) {
             Serial.println("Display nicht erkannt. Ist es das T-Display S3 AMOLED 1,91 Zoll?");
             delay(2000);
         }
     }
 
-    amoled.setRotation(config::DISPLAY_ROTATION);
-    amoled.setBrightness(config::DISPLAY_BRIGHTNESS);
-
-    beginLvglHelper(amoled);
+    beginLvglHelper(panel::device());
     controller::begin();
 
-    Serial.printf("Tuerampel M3 gestartet, %u x %u\n", amoled.width(), amoled.height());
+    Serial.printf("Tuerampel %s gestartet, %u x %u\n", ota::version(), panel::device().width(),
+                  panel::device().height());
 }
 
 void loop() {
     pollButton();
     controller::loop();
+    ota::loop();
     lv_timer_handler();
     delay(5);
 }

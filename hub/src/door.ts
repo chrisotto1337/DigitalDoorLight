@@ -1,7 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
 
 import type { Env } from "./env";
+import { NACHT_STANDARD, nachtStand, type NachtEinstellung } from "./nacht";
 import {
+  istFirmwareVersion,
   pruefeNachricht,
   type ClientNachricht,
   type Farbe,
@@ -35,10 +37,20 @@ const VERPASST_TTL_S = 6 * 60 * 60;
 // Gleiches Thema: eine noch nicht zugestellte Anfrage wird durch "verpasst" ersetzt.
 const PUSH_THEMA = "anfrage";
 
+const NACHT_SPEICHER = "nacht";
+// Der Alarm zum Wechsel zwischen Tag und Nacht kommt knapp danach, nie davor.
+const NACHT_ALARM_PUFFER_MS = 1000;
+
 interface Zustand {
   status: { farbe: Farbe; seit: number; bis: number | null };
   anfrage: { id: string; start: number; frist: number } | null;
-  geraet: { zuletzt: number | null; strom: Strom | null; akku_prozent: number | null };
+  geraet: {
+    zuletzt: number | null;
+    strom: Strom | null;
+    akku_prozent: number | null;
+    // Fehlt in Zustaenden von vor M7
+    firmware?: string | null;
+  };
 }
 
 interface PushZustand {
@@ -59,7 +71,7 @@ function anfangsZustand(): Zustand {
   return {
     status: { farbe: "gruen", seit: Date.now(), bis: null },
     anfrage: null,
-    geraet: { zuletzt: null, strom: null, akku_prozent: null },
+    geraet: { zuletzt: null, strom: null, akku_prozent: null, firmware: null },
   };
 }
 
@@ -67,6 +79,9 @@ export class Door extends DurableObject<Env> {
   private zustand: Zustand = anfangsZustand();
   private push: PushZustand = { vapid: null, kontakt: null, abos: [] };
   private vapidLaeuft: Promise<VapidSchluessel> | null = null;
+  private nacht: NachtEinstellung = { ...NACHT_STANDARD };
+  // Zuletzt an alle gemeldet: Nacht ja oder nein. null nach einem Neustart.
+  private nachtGemeldet: boolean | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -80,6 +95,10 @@ export class Door extends DurableObject<Env> {
       const push = await ctx.storage.get<PushZustand>(PUSH_SPEICHER);
       if (push) {
         this.push = push;
+      }
+      const nacht = await ctx.storage.get<NachtEinstellung>(NACHT_SPEICHER);
+      if (nacht) {
+        this.nacht = nacht;
       }
     });
   }
@@ -122,8 +141,13 @@ export class Door extends DurableObject<Env> {
     if (anfrage) {
       this.senden(server, anfrage);
     }
+    this.senden(server, this.nachtNachricht(jetzt));
 
     if (rolle === "display") {
+      const firmware = this.firmwareNachricht();
+      if (firmware) {
+        this.senden(server, firmware);
+      }
       this.zustand.geraet.zuletzt = jetzt;
       await this.speichern();
       this.anRolle("app", this.geraetNachricht());
@@ -235,8 +259,18 @@ export class Door extends DurableObject<Env> {
       case "geraet": {
         this.zustand.geraet.strom = n.strom;
         this.zustand.geraet.akku_prozent = n.akku_prozent;
+        this.zustand.geraet.firmware = n.firmware;
         await this.speichern();
         this.anRolle("app", this.geraetNachricht());
+        return;
+      }
+
+      case "nacht_setzen": {
+        this.nacht = { an: n.an, von: n.von, bis: n.bis, zeitzone: n.zeitzone };
+        await this.ctx.storage.put(NACHT_SPEICHER, this.nacht);
+        await this.alarmPlanen();
+        this.nachtGemeldet = nachtStand(this.nacht, jetzt).aktiv;
+        this.anAlle(this.nachtNachricht(jetzt));
         return;
       }
 
@@ -329,6 +363,14 @@ export class Door extends DurableObject<Env> {
         this.anAlle(meldung);
       }
     }
+
+    // Tag und Nacht haben keinen gespeicherten Zustand, sie folgen der Uhr.
+    const nacht = nachtStand(this.nacht, jetzt);
+    if (nacht.aktiv !== this.nachtGemeldet) {
+      this.nachtGemeldet = nacht.aktiv;
+      this.anAlle(this.nachtNachricht(jetzt));
+    }
+
     await this.alarmPlanen(imAlarm);
 
     if (verpasst) {
@@ -343,9 +385,12 @@ export class Door extends DurableObject<Env> {
   }
 
   private async alarmPlanen(erzwingen = false): Promise<void> {
-    const zeiten = [this.zustand.anfrage?.frist, this.zustand.status.bis ?? undefined].filter(
-      (zeit): zeit is number => zeit !== undefined,
-    );
+    const wechsel = nachtStand(this.nacht, Date.now()).wechsel;
+    const zeiten = [
+      this.zustand.anfrage?.frist,
+      this.zustand.status.bis ?? undefined,
+      wechsel === null ? undefined : wechsel + NACHT_ALARM_PUFFER_MS,
+    ].filter((zeit): zeit is number => zeit !== undefined);
     if (zeiten.length === 0) {
       await this.ctx.storage.deleteAlarm();
       return;
@@ -448,6 +493,21 @@ export class Door extends DurableObject<Env> {
     return { typ: "anfrage", ...anfrage, rest_ms: rest };
   }
 
+  private nachtNachricht(jetzt: number): HubNachricht {
+    const { aktiv, wechsel } = nachtStand(this.nacht, jetzt);
+    return { typ: "nacht", ...this.nacht, aktiv, wechsel };
+  }
+
+  // Nur wenn der Workflow beim Ausrollen eine gueltige Firmware mitgegeben hat
+  private firmwareNachricht(): HubNachricht | null {
+    const version = this.env.FIRMWARE_VERSION;
+    const md5 = this.env.FIRMWARE_MD5;
+    if (!istFirmwareVersion(version) || typeof md5 !== "string" || !/^[0-9a-f]{32}$/.test(md5)) {
+      return null;
+    }
+    return { typ: "firmware", version, md5 };
+  }
+
   // ohne: eine Verbindung, die gerade schliesst und nicht mehr zaehlt
   private geraetNachricht(ohne?: WebSocket): HubNachricht {
     const jetzt = Date.now();
@@ -468,7 +528,9 @@ export class Door extends DurableObject<Env> {
     }
 
     const { strom, akku_prozent } = this.zustand.geraet;
-    return { typ: "geraet", online, zuletzt, strom, akku_prozent };
+    const firmware = this.zustand.geraet.firmware ?? null;
+    const firmware_neu = this.firmwareNachricht() ? this.env.FIRMWARE_VERSION! : null;
+    return { typ: "geraet", online, zuletzt, strom, akku_prozent, firmware, firmware_neu };
   }
 
   // ---------- Senden und Speichern ----------

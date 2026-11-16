@@ -29,8 +29,8 @@ ICONS="$WORK/node_modules/@tabler/icons-webfont/dist/fonts/tabler-icons.ttf"
 # ASCII plus die deutschen Sonderzeichen: Ä Ö Ü ß ä ö ü
 LATIN="0x20-0x7E,0xC4,0xD6,0xDC,0xDF,0xE4,0xF6,0xFC"
 
-# Tabler-Icons: check, question-mark, minus, x, door-enter, bell, clock, wifi, wifi-off
-ICONS_BIG="0xEA5E,0xEC9D,0xEAF2,0xEB55,0xEF4C,0xEA35,0xEA70,0xEB52,0xECFA"
+# Tabler-Icons: check, question-mark, minus, x, door-enter, bell, clock, wifi, wifi-off, download
+ICONS_BIG="0xEA5E,0xEC9D,0xEAF2,0xEB55,0xEF4C,0xEA35,0xEA70,0xEB52,0xECFA,0xEA96"
 # Tabler-Icons: wifi, wifi-off
 ICONS_SMALL="0xEB52,0xECFA"
 

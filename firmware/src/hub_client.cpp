@@ -6,12 +6,6 @@
 
 #include "config.h"
 
-#if __has_include("secrets.h")
-#include "secrets.h"
-#else
-#error "firmware/include/secrets.h fehlt: secrets.example.h kopieren und ausfuellen"
-#endif
-
 // Wurzelzertifikate aus dem ESP-IDF (Mozilla-Liste), damit das Display prueft,
 // dass es wirklich mit Cloudflare spricht.
 extern const uint8_t ROOT_CERTS_START[] asm("_binary_x509_crt_bundle_start");
@@ -94,23 +88,32 @@ void startSocket() {
 
 }  // namespace
 
-void begin(MessageHandler onMessage, ConnectionHandler onConnection) {
+void begin(const credentials::Values &access, MessageHandler onMessage,
+           ConnectionHandler onConnection) {
     messageHandler = onMessage;
     connectionHandler = onConnection;
 
+    if (!credentials::complete(access)) {
+        Serial.println("[wlan] Zugangsdaten fehlen: einmal per USB mit secrets.h aufspielen");
+        return;
+    }
+
     // Der Schluessel besteht nur aus 0-9 und a-f und braucht keine URL-Kodierung.
-    path = String("/ws/display?key=") + HUB_DEVICE_KEY;
+    path = String("/ws/display?key=") + access.deviceKey;
 
     WiFi.mode(WIFI_STA);
     WiFi.setHostname("tuerampel");
     // Am USB-Netzteil kein Stromsparen: Statuswechsel kommen sofort an.
     WiFi.setSleep(false);
     WiFi.setAutoReconnect(true);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    Serial.printf("[wlan] verbinde mit %s\n", WIFI_SSID);
+    WiFi.begin(access.wifiSsid.c_str(), access.wifiPassword.c_str());
+    Serial.printf("[wlan] verbinde mit %s\n", access.wifiSsid.c_str());
 }
 
 void loop() {
+    if (path.length() == 0) {
+        return;  // keine Zugangsdaten
+    }
     if (WiFi.status() != WL_CONNECTED) {
         if (socketStarted) {
             // Ohne WLAN die Verbindung sauber beenden, sie startet danach neu.

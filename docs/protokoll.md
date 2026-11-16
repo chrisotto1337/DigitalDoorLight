@@ -15,9 +15,9 @@ zum Hub, der Hub hält den Zustand und verteilt jede Änderung an alle.
   mit Code 4000.
 - Lebenszeichen: Der Client schickt alle 30 Sekunden den Text `ping`, der Hub antwortet
   `pong`. Ohne Lebenszeichen für 75 Sekunden gilt das Display als offline.
-- Nach dem Verbinden schickt der Hub sofort `status`, eine laufende `anfrage` und an die
-  App zusätzlich `push_schluessel` und `geraet`. Nach einem Neustart des Displays ist der
-  Zustand damit sofort wieder da.
+- Nach dem Verbinden schickt der Hub sofort `status`, eine laufende `anfrage` und
+  `nacht`, an das Display zusätzlich `firmware`, an die App `push_schluessel` und
+  `geraet`. Nach einem Neustart des Displays ist der Zustand damit sofort wieder da.
 
 Alle anderen Nachrichten sind JSON-Objekte mit dem Feld `typ`. Zeiten sind Millisekunden
 seit 1970 (Unix-Zeit), Farben sind `gruen`, `gelb` oder `rot`.
@@ -28,6 +28,7 @@ seit 1970 (Unix-Zeit), Farben sind `gruen`, `gelb` oder `rot`.
 | --- | --- | --- |
 | `status_setzen` | `farbe`, `dauer_s` (Sekunden oder `null`) | Setzt die Ampel. Mit `dauer_s` springt sie danach von selbst auf Grün. Bleibt die Farbe gleich, ändert sich nur die Dauer, `seit` bleibt stehen. |
 | `antwort` | `id`, `ja` (`true` oder `false`) | Beantwortet die laufende Anfrage. |
+| `nacht_setzen` | `an`, `von`, `bis` (`"22:00"`), `zeitzone` (IANA, etwa `Europe/Berlin`) | Stellt die Nachtruhe des Displays ein. `von` und `bis` sind Ortszeit an der Tür und dürfen über Mitternacht reichen, aber nicht gleich sein. |
 | `push_anmelden` | `abo` im Format von `PushSubscription.toJSON()` | Meldet dieses Gerät für Push an. Die App schickt das bei jedem Verbindungsaufbau, der Hub merkt sich höchstens 10 Geräte. |
 | `push_abmelden` | `endpoint` | Meldet das Gerät ab. |
 | `push_test` | `endpoint`, `verzoegerung_s` (0 bis 10) | Schickt nach der Wartezeit eine Test-Mitteilung an dieses Gerät. |
@@ -38,7 +39,7 @@ seit 1970 (Unix-Zeit), Farben sind `gruen`, `gelb` oder `rot`.
 | --- | --- | --- |
 | `anfrage` | keine | Startet eine Anfrage. Bei Grün lehnt der Hub ab. Läuft schon eine, bekommt das Display dieselbe noch einmal. |
 | `abbruch` | `id` | Bricht die laufende Anfrage ab. |
-| `geraet` | `strom` (`usb` oder `akku`), `akku_prozent` (0 bis 100 oder `null`) | Meldet die Stromversorgung. |
+| `geraet` | `strom` (`usb` oder `akku`), `akku_prozent` (0 bis 100 oder `null`), `firmware` (Version oder `null`) | Meldet Stromversorgung und Firmware, nach jedem Verbindungsaufbau. |
 
 ## Vom Hub an Display und App
 
@@ -49,7 +50,9 @@ seit 1970 (Unix-Zeit), Farben sind `gruen`, `gelb` oder `rot`.
 | `antwort` | `id`, `ja` | Die Anfrage wurde beantwortet. |
 | `frist_abgelaufen` | `id` | Keine Antwort innerhalb der Frist, Standard 30 Sekunden. |
 | `abbruch` | `id` | Das Display hat die Anfrage abgebrochen. |
-| `geraet` | `online`, `zuletzt`, `strom`, `akku_prozent` | Nur an die App: Zustand des Displays. |
+| `geraet` | `online`, `zuletzt`, `strom`, `akku_prozent`, `firmware`, `firmware_neu` | Nur an die App: Zustand des Displays. `firmware_neu` ist die Version, die der Hub anbietet. |
+| `nacht` | `an`, `von`, `bis`, `zeitzone`, `aktiv`, `wechsel` | Einstellung der Nachtruhe, ob gerade Nacht ist und wann das wechselt. Kommt bei jeder Änderung und an jedem Wechsel. |
+| `firmware` | `version`, `md5` | Nur an das Display: Diese Firmware liegt zum Update bereit. |
 | `push_schluessel` | `schluessel` | Nur an die App: öffentlicher VAPID-Schlüssel des Hubs, base64url. |
 | `push_status` | `endpoint`, `aktiv` | Nur an den Absender: Antwort auf `push_anmelden` und `push_abmelden`. |
 | `push_ergebnis` | `ok`, `grund` | Nur an den Absender: Ergebnis von `push_test`, bei Fehler mit Status und Grund des Push-Dienstes. |
@@ -83,3 +86,10 @@ Google, Mozilla und Microsoft.
 Anfrage und verpasste Anfrage tragen das Thema `anfrage`. Ist die Anfrage noch nicht
 zugestellt, wenn sie verfällt, ersetzt der Push-Dienst sie durch die verpasste.
 Meldet der Push-Dienst 404 oder 410, vergisst der Hub das Abo.
+
+## Update über WLAN
+
+Die Firmware liegt unter `https://<hub>/firmware/tuerampel.bin?key=<DEVICE_KEY>`. Ohne
+gültigen Display-Schlüssel antwortet der Hub mit 401. Die Antwort trägt die Kopfzeilen
+`x-MD5` und `x-Firmware-Version`. Das Display prüft die Datei gegen die MD5-Summe aus der
+Nachricht `firmware`.

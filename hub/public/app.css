@@ -283,6 +283,20 @@ input[type="password"] {
 .einstellung { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; }
 .schalter { display: flex; align-items: center; gap: 10px; }
 .schalter input { width: 22px; height: 22px; accent-color: var(--gruen-dunkel); }
+.zeitwahl { display: flex; gap: 16px; }
+.zeitwahl label { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text-leise); }
+input[type="time"] {
+  font: inherit;
+  font-size: 17px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 2px solid var(--rand);
+  background: var(--flaeche);
+  color: var(--text);
+}
+input[type="time"]:disabled { opacity: 0.5; }
+.rechts { text-align: right; }
 
 /* Anfrage */
 .anfrage {

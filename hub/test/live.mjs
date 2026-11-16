@@ -2,6 +2,7 @@
 // Aufruf: APP_KEY=... DEVICE_KEY=... node test/live.mjs https://tuerampel-hub.chris-otto.workers.dev
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 
 const basis = (process.argv[2] ?? "").replace(/\/+$/, "");
 const { APP_KEY, DEVICE_KEY } = process.env;
@@ -38,6 +39,20 @@ const pruefungen = [
   ["App-Schluessel ist gesetzt", async () => {
     const r = await fetch(`${basis}/ws/app?key=${encodeURIComponent(APP_KEY)}`);
     assert.equal(r.status, 426, `HTTP ${r.status}: ${await r.text()}`);
+  }],
+  ["Firmware nur mit Display-Schluessel", async () => {
+    const pfad = `${basis}/firmware/tuerampel.bin`;
+    assert.equal((await fetch(pfad)).status, 401);
+    const r = await fetch(`${pfad}?key=${encodeURIComponent(DEVICE_KEY)}`);
+    assert.equal(r.status, 200);
+    const inhalt = Buffer.from(await r.arrayBuffer());
+    assert.equal(inhalt[0], 0xe9, "keine ESP32-Firmware");
+    assert.equal(r.headers.get("x-md5"), createHash("md5").update(inhalt).digest("hex"), "MD5 passt nicht");
+    const version = r.headers.get("x-firmware-version");
+    if (process.env.FIRMWARE_VERSION) {
+      assert.equal(version, process.env.FIRMWARE_VERSION);
+    }
+    console.log(`         Firmware ${version}, ${Math.round(inhalt.length / 1024)} KB`);
   }],
   ["App-Verbindung bekommt Status und Push-Schluessel", async () => {
     const adresse = `${basis.replace(/^http/, "ws")}/ws/app?key=${encodeURIComponent(APP_KEY)}`;

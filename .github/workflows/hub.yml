@@ -1,10 +1,14 @@
-# Hub: bei jeder Aenderung testen, von main aus zu Cloudflare bringen.
+# Hub und Firmware: bei jeder Aenderung testen und bauen, von main aus zu
+# Cloudflare bringen. Die Firmware reist mit dem Hub, das Display holt sie
+# sich von dort.
 #
 # Noetige Repository-Secrets (Settings > Secrets and variables > Actions):
 #   CLOUDFLARE_API_TOKEN   API-Token mit der Vorlage "Edit Cloudflare Workers"
 #   CLOUDFLARE_ACCOUNT_ID  Account-ID aus dem Cloudflare-Dashboard
 #   HUB_DEVICE_KEY         Schluessel des Displays
 #   HUB_APP_KEY            Schluessel der iPhone-App
+# WLAN-Daten braucht der Workflow nicht: Die Firmware von hier enthaelt keine
+# Geheimnisse, das Display nimmt seine gespeicherten.
 
 name: Hub
 
@@ -12,10 +16,12 @@ on:
   push:
     paths:
       - "hub/**"
+      - "firmware/**"
       - ".github/workflows/hub.yml"
   pull_request:
     paths:
       - "hub/**"
+      - "firmware/**"
       - ".github/workflows/hub.yml"
   workflow_dispatch:
 
@@ -32,7 +38,7 @@ defaults:
 
 jobs:
   test:
-    name: Testen
+    name: Hub testen
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -46,9 +52,52 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+  firmware:
+    name: Firmware bauen
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: firmware
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Die Version ist der letzte Commit, der firmware/ geaendert hat.
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.platformio
+            firmware/.pio/libdeps
+          key: pio-${{ runner.os }}-${{ hashFiles('firmware/platformio.ini') }}
+      - run: pip install platformio==6.2.0
+      - name: Bauen
+        env:
+          PLATFORMIO_BUILD_FLAGS: -DTUERAMPEL_OHNE_SECRETS
+        run: pio run
+      - name: Version pruefen
+        run: |
+          version=$(cat .pio/build/tuerampel/version.txt)
+          if ! [[ "$version" =~ ^[0-9a-f]{10}$ ]]; then
+            echo "::error::Unerwartete Firmware-Version: $version"
+            exit 1
+          fi
+          echo "Firmware $version, $(stat -c %s .pio/build/tuerampel/firmware.bin) Byte"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: firmware
+          path: |
+            firmware/.pio/build/tuerampel/firmware.bin
+            firmware/.pio/build/tuerampel/version.txt
+          if-no-files-found: error
+          retention-days: 7
+
   deploy:
     name: Zu Cloudflare bringen
-    needs: test
+    needs: [test, firmware]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -69,6 +118,19 @@ jobs:
             fi
           done
           exit $fehlt
+      - uses: actions/download-artifact@v8
+        with:
+          name: firmware
+          path: firmware-build
+      - name: Firmware in die Hub-Dateien legen
+        id: firmware
+        run: |
+          mkdir -p public/firmware
+          cp ../firmware-build/firmware.bin public/firmware/tuerampel.bin
+          version=$(cat ../firmware-build/version.txt)
+          [[ "$version" =~ ^[0-9a-f]{10}$ ]] || { echo "::error::Version $version"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "md5=$(md5sum public/firmware/tuerampel.bin | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v6
         with:
           node-version: 22
@@ -86,7 +148,10 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: hub
           packageManager: npm
-          command: deploy --secrets-file .secrets.env
+          command: >-
+            deploy --secrets-file .secrets.env
+            --var FIRMWARE_VERSION:${{ steps.firmware.outputs.version }}
+            --var FIRMWARE_MD5:${{ steps.firmware.outputs.md5 }}
         env:
           DEVICE_KEY: ${{ secrets.HUB_DEVICE_KEY }}
           APP_KEY: ${{ secrets.HUB_APP_KEY }}
@@ -95,6 +160,7 @@ jobs:
           HUB_URL: ${{ steps.deploy.outputs.deployment-url }}
           DEVICE_KEY: ${{ secrets.HUB_DEVICE_KEY }}
           APP_KEY: ${{ secrets.HUB_APP_KEY }}
+          FIRMWARE_VERSION: ${{ steps.firmware.outputs.version }}
         run: |
           sleep 5
           node test/live.mjs "$HUB_URL"

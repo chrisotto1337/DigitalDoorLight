@@ -106,6 +106,20 @@ Kommt nichts an: In den iPhone-Einstellungen unter Mitteilungen, Türampel prüf
 Mitteilungen erlaubt sind und der Fokus-Modus sie durchlässt. Fehlermeldungen des
 Push-Dienstes stehen im Cloudflare-Dashboard unter Workers, tuerampel-hub, Logs.
 
+### Nachtruhe
+
+Unter Einstellungen, "Nachtruhe am Display": Von wann bis wann das Display dunkel
+bleibt, standardmäßig 22 bis 7 Uhr. Die Uhrzeiten gelten an der Tür (Europe/Berlin),
+auch wenn das Handy gerade in einer anderen Zeitzone ist. Oben zeigt die App dann
+"Display schläft".
+
+### Firmware
+
+Der Workflow baut bei jedem Ausrollen die Firmware aus `firmware/` und legt sie als
+`public/firmware/tuerampel.bin` zu den Dateien des Hubs. Ausgeliefert wird sie nur mit
+Display-Schlüssel. Version und MD5-Summe setzt der Workflow als `FIRMWARE_VERSION` und
+`FIRMWARE_MD5`. Unter Einstellungen, "Firmware" zeigt die App, was auf dem Display läuft.
+
 ## Ausprobieren
 
 Die Testseite https://tuerampel-hub.chris-otto.workers.dev/test spielt App oder

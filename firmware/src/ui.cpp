@@ -2,6 +2,8 @@
 
 #include <lvgl.h>
 
+#include <initializer_list>
+
 #include "fonts/fonts.h"
 
 namespace ui {
@@ -43,7 +45,7 @@ struct ScreenSpec {
     bool countdown;
 };
 
-constexpr uint8_t SCREEN_COUNT = 8;
+constexpr uint8_t SCREEN_COUNT = 9;
 
 // Reihenfolge wie in ui::Screen
 const ScreenSpec SPECS[SCREEN_COUNT] = {
@@ -74,11 +76,15 @@ const ScreenSpec SPECS[SCREEN_COUNT] = {
     // NoAnswer
     {ICON_CLOCK, true, 176, COLOR_STATUS, COLOR_ON_STATUS,
      "Keine\nAntwort", &font_title_46, -12, "Bitte klopfen", nullptr, 0, false},
+    // Updating
+    {ICON_DOWNLOAD, false, 0, COLOR_STATUS, 0,
+     "Update", &font_title_46, 0, "Gleich wieder da", nullptr, 0, true},
 };
-static_assert(static_cast<uint8_t>(Screen::NoAnswer) + 1 == SCREEN_COUNT,
+static_assert(static_cast<uint8_t>(Screen::Updating) + 1 == SCREEN_COUNT,
               "SPECS passt nicht zu ui::Screen");
 
 lv_obj_t *statusIcon     = nullptr;
+lv_obj_t *column         = nullptr;
 lv_obj_t *disc           = nullptr;
 lv_obj_t *discIcon       = nullptr;
 lv_obj_t *plainIcon      = nullptr;
@@ -92,6 +98,7 @@ lv_obj_t *footerLabel    = nullptr;
 Screen currentScreen   = Screen::Connecting;
 TapHandler tapHandler  = nullptr;
 uint32_t shownSeconds  = UINT32_MAX;
+uint32_t shownPercent  = UINT32_MAX;
 const char *connectingDetail = "mit dem WLAN";
 bool isOnline = false;
 
@@ -155,7 +162,7 @@ void init(TapHandler onTap) {
     lv_obj_align(statusIcon, LV_ALIGN_TOP_RIGHT, -PADDING, PADDING);
 
     // Mittlerer Bereich: Icon, Ueberschrift, Unterzeile, Countdown
-    lv_obj_t *column = makeBox(root);
+    column = makeBox(root);
     lv_obj_set_size(column, contentWidth,
                     height - 2 * PADDING - STATUS_HEIGHT - FOOTER_HEIGHT);
     lv_obj_align(column, LV_ALIGN_TOP_MID, 0, PADDING + STATUS_HEIGHT);
@@ -239,6 +246,7 @@ void show(Screen screen) {
     lv_obj_set_hidden(countdownLabel, !spec.countdown);
     if (spec.countdown) {
         shownSeconds = UINT32_MAX;
+        shownPercent = UINT32_MAX;
         lv_bar_set_value(bar, BAR_RANGE, LV_ANIM_OFF);
         lv_label_set_text(countdownLabel, "");
     }
@@ -274,6 +282,25 @@ void setCountdown(uint32_t remainingMs, uint32_t totalMs) {
             lv_label_set_text_fmt(countdownLabel, "noch %lu Sekunden",
                                   static_cast<unsigned long>(seconds));
         }
+    }
+}
+
+bool setProgress(uint32_t done, uint32_t total) {
+    const uint32_t percent =
+        total == 0 ? 0 : static_cast<uint32_t>(static_cast<uint64_t>(done) * 100 / total);
+    if (percent == shownPercent) {
+        return false;
+    }
+    shownPercent = percent;
+    lv_bar_set_value(bar, static_cast<int32_t>(percent * BAR_RANGE / 100), LV_ANIM_OFF);
+    lv_label_set_text_fmt(countdownLabel, "%lu %%", static_cast<unsigned long>(percent));
+    return true;
+}
+
+void setShift(int32_t dx, int32_t dy) {
+    for (lv_obj_t *part : {statusIcon, column, footer}) {
+        lv_obj_set_style_translate_x(part, dx, 0);
+        lv_obj_set_style_translate_y(part, dy, 0);
     }
 }
 

@@ -116,6 +116,21 @@
         <button id="push-test" type="button" class="knopf knopf-klein">Senden</button>
       </div>
       <div class="einstellung">
+        <label class="schalter">
+          <input id="nacht-an" type="checkbox">
+          <span>Nachtruhe am Display</span>
+        </label>
+      </div>
+      <div class="zeitwahl">
+        <label>von <input id="nacht-von" type="time" required></label>
+        <label>bis <input id="nacht-bis" type="time" required></label>
+      </div>
+      <p id="nacht-info" class="kleintext"></p>
+      <div class="einstellung">
+        <span>Firmware</span>
+        <span id="firmware-text" class="kleintext rechts">unbekannt</span>
+      </div>
+      <div class="einstellung">
         <span>App-Schlüssel</span>
         <button id="abmelden" type="button" class="knopf knopf-klein">Ändern</button>
       </div>

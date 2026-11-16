@@ -9,6 +9,15 @@ import {
   type Rolle,
   type Strom,
 } from "./protocol";
+import {
+  aboErloschen,
+  sendePush,
+  vapidErzeugen,
+  type PushAbo,
+  type PushErgebnis,
+  type PushOptionen,
+  type VapidSchluessel,
+} from "./webpush";
 
 // Kopfzeile, ueber die der Worker die Rolle des Clients mitteilt.
 export const ROLLEN_HEADER = "X-Tuerampel-Rolle";
@@ -18,10 +27,25 @@ const STANDARD_FRIST_S = 30;
 // Ohne Lebenszeichen in dieser Zeit gilt das Display als offline.
 const ONLINE_TIMEOUT_MS = 75_000;
 
+const PUSH_SPEICHER = "push";
+// Mehr Geraete braucht eine Tuer nicht. Das am laengsten stille fliegt zuerst raus.
+const MAX_PUSH_ABOS = 10;
+// Eine verpasste Anfrage ist auch Stunden spaeter noch interessant.
+const VERPASST_TTL_S = 6 * 60 * 60;
+// Gleiches Thema: eine noch nicht zugestellte Anfrage wird durch "verpasst" ersetzt.
+const PUSH_THEMA = "anfrage";
+
 interface Zustand {
   status: { farbe: Farbe; seit: number; bis: number | null };
   anfrage: { id: string; start: number; frist: number } | null;
   geraet: { zuletzt: number | null; strom: Strom | null; akku_prozent: number | null };
+}
+
+interface PushZustand {
+  vapid: VapidSchluessel | null;
+  // Absenderadresse fuer den Push-Dienst, die Adresse des Hubs
+  kontakt: string | null;
+  abos: (PushAbo & { zuletzt: number })[];
 }
 
 // Haengt an jeder WebSocket-Verbindung und ueberlebt den Ruhezustand.
@@ -41,6 +65,8 @@ function anfangsZustand(): Zustand {
 
 export class Door extends DurableObject<Env> {
   private zustand: Zustand = anfangsZustand();
+  private push: PushZustand = { vapid: null, kontakt: null, abos: [] };
+  private vapidLaeuft: Promise<VapidSchluessel> | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -50,6 +76,10 @@ export class Door extends DurableObject<Env> {
       const gespeichert = await ctx.storage.get<Zustand>(SPEICHER_SCHLUESSEL);
       if (gespeichert) {
         this.zustand = gespeichert;
+      }
+      const push = await ctx.storage.get<PushZustand>(PUSH_SPEICHER);
+      if (push) {
+        this.push = push;
       }
     });
   }
@@ -63,6 +93,14 @@ export class Door extends DurableObject<Env> {
     }
 
     await this.faelligesErledigen();
+
+    const herkunft = new URL(request.url).origin;
+    if (this.push.kontakt !== herkunft) {
+      this.push.kontakt = herkunft;
+      await this.pushSpeichern();
+    }
+    // Den Schluessel vorher holen, damit die Begruessung in einem Rutsch rausgeht
+    const vapid = rolle === "app" ? await this.vapid() : null;
 
     const paar = new WebSocketPair();
     const [client, server] = Object.values(paar);
@@ -90,6 +128,7 @@ export class Door extends DurableObject<Env> {
       await this.speichern();
       this.anRolle("app", this.geraetNachricht());
     } else {
+      this.senden(server, { typ: "push_schluessel", schluessel: vapid!.oeffentlich });
       this.senden(server, this.geraetNachricht());
     }
 
@@ -111,7 +150,9 @@ export class Door extends DurableObject<Env> {
 
     await this.faelligesErledigen();
 
-    const pruefung = pruefeNachricht(roh, verbindung.rolle);
+    const pruefung = pruefeNachricht(roh, verbindung.rolle, {
+      lokalePushZiele: this.env.PUSH_LOKAL_ERLAUBT === "1",
+    });
     if (!pruefung.ok) {
       this.senden(ws, { typ: "fehler", grund: pruefung.grund });
       return;
@@ -157,6 +198,13 @@ export class Door extends DurableObject<Env> {
         };
         await this.speichernUndPlanen();
         this.anAlle(this.anfrageNachricht()!);
+        const { id, start, frist } = this.zustand.anfrage;
+        this.hintergrund(
+          this.pushAnAlle(
+            { art: "anfrage", id, start, frist },
+            { ttlS: Math.ceil((frist - jetzt) / 1000), dringend: true, thema: PUSH_THEMA },
+          ),
+        );
         return;
       }
 
@@ -191,6 +239,49 @@ export class Door extends DurableObject<Env> {
         this.anRolle("app", this.geraetNachricht());
         return;
       }
+
+      case "push_anmelden": {
+        // Kommt bei jedem Verbindungsaufbau der App, haelt das Abo frisch.
+        const abos = this.push.abos.filter((a) => a.endpoint !== n.abo.endpoint);
+        abos.push({ ...n.abo, zuletzt: jetzt });
+        abos.sort((a, b) => b.zuletzt - a.zuletzt);
+        this.push.abos = abos.slice(0, MAX_PUSH_ABOS);
+        await this.pushSpeichern();
+        this.senden(ws, { typ: "push_status", endpoint: n.abo.endpoint, aktiv: true });
+        return;
+      }
+
+      case "push_abmelden": {
+        await this.abosEntfernen([n.endpoint]);
+        this.senden(ws, { typ: "push_status", endpoint: n.endpoint, aktiv: false });
+        return;
+      }
+
+      case "push_test": {
+        const abo = this.push.abos.find((a) => a.endpoint === n.endpoint);
+        if (!abo) {
+          this.senden(ws, {
+            typ: "push_ergebnis",
+            ok: false,
+            grund: "Dieses Geraet ist beim Hub nicht angemeldet",
+          });
+          return;
+        }
+        this.hintergrund(
+          (async () => {
+            if (n.verzoegerung_s > 0) {
+              await new Promise((weiter) => setTimeout(weiter, n.verzoegerung_s * 1000));
+            }
+            const [ergebnis] = await this.pushSenden([abo], { art: "test" }, { ttlS: 60, dringend: true });
+            this.senden(ws, {
+              typ: "push_ergebnis",
+              ok: ergebnis.grund === null,
+              grund: ergebnis.grund === null ? null : `${ergebnis.status} ${ergebnis.grund}`,
+            });
+          })(),
+        );
+        return;
+      }
     }
   }
 
@@ -217,11 +308,13 @@ export class Door extends DurableObject<Env> {
   private async faelligesErledigen(imAlarm = false): Promise<void> {
     const jetzt = Date.now();
     const meldungen: HubNachricht[] = [];
+    let verpasst: { id: string; start: number } | null = null;
 
     const anfrage = this.zustand.anfrage;
     if (anfrage && anfrage.frist <= jetzt) {
       this.zustand.anfrage = null;
       meldungen.push({ typ: "frist_abgelaufen", id: anfrage.id });
+      verpasst = { id: anfrage.id, start: anfrage.start };
     }
 
     const status = this.zustand.status;
@@ -237,6 +330,16 @@ export class Door extends DurableObject<Env> {
       }
     }
     await this.alarmPlanen(imAlarm);
+
+    if (verpasst) {
+      const arbeit = this.pushAnAlle(
+        { art: "verpasst", ...verpasst },
+        { ttlS: VERPASST_TTL_S, dringend: false, thema: PUSH_THEMA },
+      );
+      // Im Alarm abwarten, sonst laeuft es neben der eigentlichen Nachricht her.
+      if (imAlarm) await arbeit;
+      else this.hintergrund(arbeit);
+    }
   }
 
   private async alarmPlanen(erzwingen = false): Promise<void> {
@@ -256,6 +359,77 @@ export class Door extends DurableObject<Env> {
   private fristMs(): number {
     const sekunden = Number(this.env.ANFRAGE_FRIST_S);
     return (Number.isFinite(sekunden) && sekunden > 0 ? sekunden : STANDARD_FRIST_S) * 1000;
+  }
+
+  // ---------- Push ----------
+
+  // Das Schluesselpaar entsteht beim ersten Bedarf und bleibt dann fuer immer.
+  // Aendert es sich, muessen sich alle Geraete neu anmelden.
+  private vapid(): Promise<VapidSchluessel> {
+    if (this.push.vapid) {
+      return Promise.resolve(this.push.vapid);
+    }
+    this.vapidLaeuft ??= (async () => {
+      const neu = await vapidErzeugen();
+      this.push.vapid = neu;
+      await this.pushSpeichern();
+      return neu;
+    })().finally(() => {
+      this.vapidLaeuft = null;
+    });
+    return this.vapidLaeuft;
+  }
+
+  private kontakt(): string {
+    return this.push.kontakt ?? "mailto:tuerampel@example.com";
+  }
+
+  private async pushSenden(
+    abos: PushAbo[],
+    daten: Record<string, unknown>,
+    optionen: PushOptionen,
+  ): Promise<PushErgebnis[]> {
+    const vapid = await this.vapid();
+    const ergebnisse = await Promise.all(
+      abos.map((abo) =>
+        sendePush(abo, daten, vapid, this.kontakt(), optionen).catch(
+          (fehler): PushErgebnis => ({ status: 0, grund: String(fehler) }),
+        ),
+      ),
+    );
+    ergebnisse.forEach((ergebnis, i) => {
+      if (ergebnis.grund !== null) {
+        console.warn(`Push an ${new URL(abos[i].endpoint).host}: ${ergebnis.status} ${ergebnis.grund}`);
+      }
+    });
+    const erloschen = abos.filter((_, i) => aboErloschen(ergebnisse[i]));
+    if (erloschen.length > 0) {
+      await this.abosEntfernen(erloschen.map((a) => a.endpoint));
+    }
+    return ergebnisse;
+  }
+
+  private async pushAnAlle(daten: Record<string, unknown>, optionen: PushOptionen): Promise<void> {
+    if (this.push.abos.length > 0) {
+      await this.pushSenden([...this.push.abos], daten, optionen);
+    }
+  }
+
+  private async abosEntfernen(endpunkte: string[]): Promise<void> {
+    const vorher = this.push.abos.length;
+    this.push.abos = this.push.abos.filter((a) => !endpunkte.includes(a.endpoint));
+    if (this.push.abos.length !== vorher) {
+      await this.pushSpeichern();
+    }
+  }
+
+  // Arbeit, die nach der Antwort an die Clients weiterlaufen darf
+  private hintergrund(arbeit: Promise<unknown>): void {
+    this.ctx.waitUntil(
+      arbeit.catch((fehler) => {
+        console.error("Hintergrundarbeit fehlgeschlagen:", fehler);
+      }),
+    );
   }
 
   // ---------- Nachrichten bauen ----------
@@ -321,6 +495,10 @@ export class Door extends DurableObject<Env> {
 
   private async speichern(): Promise<void> {
     await this.ctx.storage.put(SPEICHER_SCHLUESSEL, this.zustand);
+  }
+
+  private async pushSpeichern(): Promise<void> {
+    await this.ctx.storage.put(PUSH_SPEICHER, this.push);
   }
 
   private async speichernUndPlanen(): Promise<void> {

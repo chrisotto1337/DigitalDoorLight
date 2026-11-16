@@ -1,5 +1,7 @@
 // Nachrichten zwischen Display, Hub und App. Beschreibung: docs/protokoll.md
 
+import { erlaubterEndpunkt, type PushAbo } from "./webpush";
+
 export type Rolle = "display" | "app";
 export type Farbe = "gruen" | "gelb" | "rot";
 export type Strom = "usb" | "akku";
@@ -17,7 +19,10 @@ export type ClientNachricht =
   | { typ: "antwort"; id: string; ja: boolean }
   | { typ: "anfrage" }
   | { typ: "abbruch"; id: string }
-  | { typ: "geraet"; strom: Strom; akku_prozent: number | null };
+  | { typ: "geraet"; strom: Strom; akku_prozent: number | null }
+  | { typ: "push_anmelden"; abo: PushAbo }
+  | { typ: "push_abmelden"; endpoint: string }
+  | { typ: "push_test"; endpoint: string; verzoegerung_s: number };
 
 const ERLAUBT: Record<ClientNachricht["typ"], Rolle> = {
   status_setzen: "app",
@@ -25,7 +30,13 @@ const ERLAUBT: Record<ClientNachricht["typ"], Rolle> = {
   anfrage: "display",
   abbruch: "display",
   geraet: "display",
+  push_anmelden: "app",
+  push_abmelden: "app",
+  push_test: "app",
 };
+
+// Wartezeit vor einer Test-Mitteilung, damit man das Handy sperren kann
+export const MAX_TEST_VERZOEGERUNG_S = 10;
 
 // ---------- Vom Hub an die Clients ----------
 
@@ -42,6 +53,9 @@ export type HubNachricht =
       strom: Strom | null;
       akku_prozent: number | null;
     }
+  | { typ: "push_schluessel"; schluessel: string }
+  | { typ: "push_status"; endpoint: string; aktiv: boolean }
+  | { typ: "push_ergebnis"; ok: boolean; grund: string | null }
   | { typ: "fehler"; grund: string };
 
 export type Pruefung =
@@ -59,8 +73,29 @@ function istId(wert: unknown): wert is string {
   return typeof wert === "string" && wert.length > 0 && wert.length <= MAX_ID_LAENGE;
 }
 
+// base64url ohne Auffuellung, mit genau dieser Laenge
+function istBase64url(wert: unknown, laenge: number): wert is string {
+  return typeof wert === "string" && wert.length === laenge && /^[A-Za-z0-9_-]+$/.test(wert);
+}
+
+function ohneAuffuellung(wert: unknown): unknown {
+  return typeof wert === "string" ? wert.replace(/=+$/, "") : wert;
+}
+
+export interface PruefOptionen {
+  // Nur fuer lokale Tests: Push-Ziele auf 127.0.0.1 zulassen
+  lokalePushZiele?: boolean;
+}
+
 // Prueft Format und Berechtigung einer eingehenden Nachricht.
-export function pruefeNachricht(roh: string | ArrayBuffer, rolle: Rolle): Pruefung {
+export function pruefeNachricht(
+  roh: string | ArrayBuffer,
+  rolle: Rolle,
+  optionen: PruefOptionen = {},
+): Pruefung {
+  const endpunktOk = (wert: unknown): wert is string =>
+    typeof wert === "string" && erlaubterEndpunkt(wert, optionen.lokalePushZiele ?? false);
+
   if (typeof roh !== "string") {
     return { ok: false, grund: "Nur Textnachrichten werden angenommen" };
   }
@@ -138,6 +173,47 @@ export function pruefeNachricht(roh: string | ArrayBuffer, rolle: Rolle): Pruefu
         return { ok: false, grund: "akku_prozent muss null oder 0 bis 100 sein" };
       }
       return { ok: true, nachricht: { typ, strom: daten.strom, akku_prozent: akku } };
+    }
+    case "push_anmelden": {
+      // Format von PushSubscription.toJSON()
+      const abo = daten.abo;
+      if (!istObjekt(abo) || !istObjekt(abo.keys)) {
+        return { ok: false, grund: "abo mit endpoint und keys fehlt" };
+      }
+      if (!endpunktOk(abo.endpoint)) {
+        return { ok: false, grund: "endpoint ist kein bekannter Push-Dienst" };
+      }
+      // 65 Byte Schluessel und 16 Byte Geheimnis, base64url
+      const p256dh = ohneAuffuellung(abo.keys.p256dh);
+      const auth = ohneAuffuellung(abo.keys.auth);
+      if (!istBase64url(p256dh, 87) || !istBase64url(auth, 22)) {
+        return { ok: false, grund: "keys.p256dh oder keys.auth hat das falsche Format" };
+      }
+      return { ok: true, nachricht: { typ, abo: { endpoint: abo.endpoint, p256dh, auth } } };
+    }
+    case "push_abmelden": {
+      if (typeof daten.endpoint !== "string" || daten.endpoint.length > 1024) {
+        return { ok: false, grund: "endpoint fehlt" };
+      }
+      return { ok: true, nachricht: { typ, endpoint: daten.endpoint } };
+    }
+    case "push_test": {
+      if (typeof daten.endpoint !== "string" || daten.endpoint.length > 1024) {
+        return { ok: false, grund: "endpoint fehlt" };
+      }
+      const verzoegerung = daten.verzoegerung_s ?? 0;
+      if (
+        typeof verzoegerung !== "number" ||
+        !Number.isInteger(verzoegerung) ||
+        verzoegerung < 0 ||
+        verzoegerung > MAX_TEST_VERZOEGERUNG_S
+      ) {
+        return {
+          ok: false,
+          grund: `verzoegerung_s muss 0 bis ${MAX_TEST_VERZOEGERUNG_S} sein`,
+        };
+      }
+      return { ok: true, nachricht: { typ, endpoint: daten.endpoint, verzoegerung_s: verzoegerung } };
     }
   }
 }

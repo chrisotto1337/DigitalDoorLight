@@ -7,4 +7,6 @@ export interface Env {
   APP_KEY?: string;
   // Frist fuer Anfragen in Sekunden, aus wrangler.jsonc
   ANFRAGE_FRIST_S?: string;
+  // Nur fuer lokale Tests: "1" erlaubt Push-Ziele auf 127.0.0.1
+  PUSH_LOKAL_ERLAUBT?: string;
 }

@@ -15,6 +15,8 @@ setzt.
 Meilenstein 4 und 5 sind gebaut: Die App läuft unter
 https://tuerampel-hub.chris-otto.workers.dev auf dem iPhone und im Browser am PC und
 beantwortet Anfragen. Der Test am iPhone steht aus.
+Meilenstein 6 ist gebaut: Anfragen kommen als Push-Mitteilung, auch bei geschlossener
+App. Einschalten: [hub/README.md](hub/README.md#mitteilungen).
 
 ![Die sechs Screens](docs/m1-screens.png)
 
@@ -33,7 +35,7 @@ ohne Verbindung.
 | M3 | Display hängt am Hub | erledigt |
 | M4 | iPhone-App steuert die Ampel | gebaut, Test am iPhone offen |
 | M5 | Anfrage bei offener App | gebaut, Test am iPhone offen |
-| M6 | Push-Mitteilung | offen |
+| M6 | Push-Mitteilung | gebaut, Test am iPhone offen |
 | M7 | Dauerbetrieb an der Tür | offen |
 | M8 | Akku als Puffer | offen |
 
@@ -132,3 +134,4 @@ Die App liegt in `hub/public`, der Hub liefert sie aus.
 | Schrift [Inter](https://github.com/rsms/inter) | SIL Open Font License 1.1 |
 | [Tabler Icons](https://github.com/tabler/tabler-icons) | MIT |
 | [Wrangler](https://github.com/cloudflare/workers-sdk) 4.162.0, nur zum Bauen | MIT oder Apache 2.0 |
+| [http_ece](https://github.com/martinthomson/encrypted-content-encoding) 1.2.1, nur im Test | MIT |

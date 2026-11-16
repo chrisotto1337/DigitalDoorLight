@@ -130,6 +130,33 @@ button { font: inherit; color: inherit; cursor: pointer; }
   font-weight: 600;
 }
 
+.pushkarte {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 2px solid var(--rand);
+  background: var(--flaeche);
+}
+.pushkarte p { margin: 0; font-size: 15px; font-weight: 600; }
+.pushkarte p { flex: 1; }
+.pushkarte .knopf { flex: none; }
+.knopf-weg {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-right: -8px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-leise);
+}
+.knopf-weg svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+
 /* Statuskarte */
 .statuskarte {
   padding: 22px;

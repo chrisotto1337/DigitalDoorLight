@@ -12,8 +12,9 @@ https://tuerampel-hub.chris-otto.workers.dev direkt bereit, ohne den Worker zu s
 | `public/index.html` | Aufbau der App |
 | `public/app.js` | Verbindung zum Hub, Anzeige, Hinweise bei Anfragen |
 | `public/app.css` | Gestaltung, hell und dunkel |
-| `public/sw.js` | Service Worker: schneller Start, Tipp auf Benachrichtigung |
+| `public/sw.js` | Service Worker: schneller Start, Push-Mitteilungen, Tipp auf Mitteilung |
 | `public/_headers` | Sicherheits-Header |
+| `src/webpush.ts` | Web Push ohne Fremdbibliothek: Verschlüsselung und VAPID |
 
 ## Einmalige Einrichtung
 
@@ -87,6 +88,24 @@ mit einer Meldung ab, welches fehlt. Erneut starten geht unter Actions > Hub >
 Am PC läuft dieselbe Adresse im Browser. Chrome und Edge bieten in der
 Adressleiste an, sie als App zu installieren.
 
+### Mitteilungen
+
+Damit eine Anfrage auch bei geschlossener App ankommt:
+
+1. Die App vom Home-Bildschirm öffnen. In Safari selbst bietet iOS keine Mitteilungen an.
+2. Oben auf "Einschalten" tippen, dann "Erlauben". Alternativ unter Einstellungen,
+   "Mitteilungen bei Anfrage".
+3. Unter Einstellungen "Test-Mitteilung", "Senden" tippen und das iPhone sperren. Nach
+   5 Sekunden kommt die Mitteilung.
+
+Jedes Gerät meldet sich einzeln an, am PC genauso über den Browser. Eine Anfrage meldet
+sich mit "Anfrage an der Tür", bleibt sie unbeantwortet, wird daraus "Verpasste Anfrage".
+Ein eigener Ton geht mit Web Push nicht, es kommt der Standardton von iOS.
+
+Kommt nichts an: In den iPhone-Einstellungen unter Mitteilungen, Türampel prüfen, ob
+Mitteilungen erlaubt sind und der Fokus-Modus sie durchlässt. Fehlermeldungen des
+Push-Dienstes stehen im Cloudflare-Dashboard unter Workers, tuerampel-hub, Logs.
+
 ## Ausprobieren
 
 Die Testseite https://tuerampel-hub.chris-otto.workers.dev/test spielt App oder
@@ -106,7 +125,7 @@ cd hub
 npm install
 cp .dev.vars.example .dev.vars
 npm run dev        # Hub unter http://localhost:8787, Testseite unter /test
-npm test           # Ablauftest gegen einen lokalen Hub
+npm test           # Push-Verschlüsselung, dann Ablauftest gegen einen lokalen Hub
 npm run typecheck
 ```
 

@@ -39,26 +39,30 @@ const pruefungen = [
     const r = await fetch(`${basis}/ws/app?key=${encodeURIComponent(APP_KEY)}`);
     assert.equal(r.status, 426, `HTTP ${r.status}: ${await r.text()}`);
   }],
-  ["App-Verbindung bekommt den Status", async () => {
+  ["App-Verbindung bekommt Status und Push-Schluessel", async () => {
     const adresse = `${basis.replace(/^http/, "ws")}/ws/app?key=${encodeURIComponent(APP_KEY)}`;
-    const status = await new Promise((ok, fehler) => {
+    // Die Begruessung endet mit "geraet"
+    const begruessung = await new Promise((ok, fehler) => {
       const ws = new WebSocket(adresse);
+      const erhalten = {};
       const timer = setTimeout(() => {
         ws.close();
-        fehler(new Error("kein Status nach 10 Sekunden"));
+        fehler(new Error(`unvollstaendige Begruessung nach 10 Sekunden: ${Object.keys(erhalten).join(", ")}`));
       }, 10_000);
       ws.onerror = () => fehler(new Error("Verbindung fehlgeschlagen"));
       ws.onmessage = (e) => {
         const n = JSON.parse(String(e.data));
-        if (n.typ === "status") {
+        erhalten[n.typ] = n;
+        if (n.typ === "geraet") {
           clearTimeout(timer);
           ws.close();
-          ok(n);
+          ok(erhalten);
         }
       };
     });
-    assert.ok(["gruen", "gelb", "rot"].includes(status.farbe));
-    console.log(`         Ampel steht auf ${status.farbe}`);
+    assert.ok(["gruen", "gelb", "rot"].includes(begruessung.status?.farbe), "Status fehlt");
+    assert.equal(Buffer.from(begruessung.push_schluessel?.schluessel ?? "", "base64url").length, 65, "Push-Schluessel fehlt");
+    console.log(`         Ampel steht auf ${begruessung.status.farbe}, Display ${begruessung.geraet.online ? "online" : "offline"}`);
   }],
 ];
 

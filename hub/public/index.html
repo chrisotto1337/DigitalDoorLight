@@ -44,6 +44,15 @@
     <p id="verbindung-hinweis" class="hinweis" role="status" hidden>Keine Verbindung zum Hub. Ich verbinde neu.</p>
     <p id="ton-hinweis" class="kleintext" hidden>Damit der Ton bei einer Anfrage spielt, einmal irgendwo tippen oder klicken.</p>
 
+    <!-- Erscheint, solange auf diesem Gerät keine Mitteilungen eingeschaltet sind -->
+    <section id="pushkarte" class="pushkarte" hidden>
+      <p id="pushkarte-text">Anfragen auch bei geschlossener App melden</p>
+      <button id="pushkarte-knopf" type="button" class="knopf knopf-klein">Einschalten</button>
+      <button id="pushkarte-weg" type="button" class="knopf-weg" aria-label="Hinweis ausblenden">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
+      </button>
+    </section>
+
     <section id="statuskarte" class="statuskarte" aria-live="polite">
       <p class="statuskarte-zeile">Gerade an der Tür</p>
       <p id="status-titel" class="statuskarte-titel">…</p>
@@ -98,10 +107,14 @@
       </div>
       <p class="kleintext">Der Ton spielt nur, solange die App offen ist.</p>
       <div class="einstellung">
-        <span>Benachrichtigung bei Anfrage</span>
-        <button id="benachrichtigung" type="button" class="knopf knopf-klein">Erlauben</button>
+        <span>Mitteilungen bei Anfrage</span>
+        <button id="push-schalter" type="button" class="knopf knopf-klein">Einschalten</button>
       </div>
-      <p id="benachrichtigung-info" class="kleintext">Hilft am PC, wenn die App in einem anderen Tab offen ist.</p>
+      <p id="push-info" class="kleintext"></p>
+      <div id="push-test-zeile" class="einstellung" hidden>
+        <span>Test-Mitteilung</span>
+        <button id="push-test" type="button" class="knopf knopf-klein">Senden</button>
+      </div>
       <div class="einstellung">
         <span>App-Schlüssel</span>
         <button id="abmelden" type="button" class="knopf knopf-klein">Ändern</button>

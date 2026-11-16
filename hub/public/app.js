@@ -8,6 +8,10 @@ const NAMEN = { gruen: "Frei", gelb: "Bitte fragen", rot: "Nicht stören" };
 const FRIST_MS = 30_000;
 const PING_MS = 30_000;
 const IST_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+// Vom Home-Bildschirm gestartet. Auf dem iPhone gibt es nur dann Push.
+const IST_APP = navigator.standalone === true || window.matchMedia?.("(display-mode: standalone)").matches === true;
+const PUSH_MOEGLICH = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const TEST_VERZOEGERUNG_S = 5;
 
 // ---------- Gespeicherte Einstellungen ----------
 
@@ -180,8 +184,9 @@ const hinweis = {
     return true;
   },
 
+  // Nur ohne Push: dann zeigt die offene App selbst eine Benachrichtigung.
   async benachrichtigen() {
-    if (!document.hidden || !("Notification" in window) || Notification.permission !== "granted") return;
+    if (push.abo || !document.hidden || !("Notification" in window) || Notification.permission !== "granted") return;
     try {
       const reg = await navigator.serviceWorker?.getRegistration();
       const optionen = { body: "Jemand möchte rein", tag: "anfrage", requireInteraction: true, icon: "/icons/icon-192.png" };
@@ -223,6 +228,162 @@ const hinweis = {
     this.benachrichtigungSchliessen();
   },
 };
+
+// ---------- Push-Mitteilungen ----------
+
+const push = {
+  schluessel: null, // öffentlicher Schlüssel des Hubs, kommt mit der Begrüßung
+  reg: null, // Service Worker
+  abo: null, // PushSubscription dieses Geräts
+  beimHub: false, // der Hub hat das Abo bestätigt
+  laeuft: false, // Ein- oder Ausschalten in Arbeit
+};
+
+function ausBase64url(text) {
+  const normal = text.replace(/-/g, "+").replace(/_/g, "/");
+  const roh = atob(normal + "=".repeat((4 - (normal.length % 4)) % 4));
+  return Uint8Array.from(roh, (z) => z.charCodeAt(0));
+}
+
+function zuBase64url(puffer) {
+  let text = "";
+  for (const b of new Uint8Array(puffer)) text += String.fromCharCode(b);
+  return btoa(text).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function pushLaden() {
+  zeigePush();
+  if (!PUSH_MOEGLICH) return;
+  try {
+    push.reg = await navigator.serviceWorker.ready;
+    push.abo = await push.reg.pushManager.getSubscription();
+  } catch {
+    push.abo = null;
+  }
+  zeigePush();
+  pushAbgleichen();
+}
+
+// Meldet das Abo beim Hub an. Läuft bei jedem Verbindungsaufbau,
+// so erfährt der Hub auch von einem erneuerten Abo.
+async function pushAbgleichen() {
+  if (!push.abo || !push.schluessel || ws?.readyState !== WebSocket.OPEN) return;
+  const aboSchluessel = push.abo.options?.applicationServerKey;
+  if (aboSchluessel && zuBase64url(aboSchluessel) !== push.schluessel) {
+    // Der Hub hat einen neuen Schlüssel, das alte Abo taugt nicht mehr.
+    try {
+      await push.abo.unsubscribe();
+    } catch {
+      // egal
+    }
+    push.abo = null;
+    push.beimHub = false;
+    zeigePush();
+    melde("Mitteilungen bitte neu einschalten");
+    return;
+  }
+  sende({ typ: "push_anmelden", abo: push.abo.toJSON() });
+}
+
+// Muss direkt aus dem Tipp heraus laufen, sonst fragt Safari nicht nach.
+async function pushEinschalten() {
+  if (push.laeuft) return;
+  if (!push.reg || !push.schluessel) {
+    melde("Erst mit dem Hub verbinden");
+    return;
+  }
+  push.laeuft = true;
+  zeigePush();
+  try {
+    push.abo = await push.reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: ausBase64url(push.schluessel),
+    });
+    push.beimHub = false;
+    pushAbgleichen();
+  } catch {
+    melde(Notification.permission === "denied" ? "Mitteilungen sind blockiert" : "Einschalten hat nicht geklappt");
+  } finally {
+    push.laeuft = false;
+    zeigePush();
+  }
+}
+
+async function pushAusschalten() {
+  if (push.laeuft || !push.abo) return;
+  push.laeuft = true;
+  zeigePush();
+  const endpoint = push.abo.endpoint;
+  try {
+    await push.abo.unsubscribe();
+  } catch {
+    // Dann bleibt es beim Push-Dienst, der Hub vergisst es trotzdem.
+  }
+  push.abo = null;
+  push.beimHub = false;
+  // Ohne Verbindung merkt der Hub es beim nächsten Push selbst.
+  if (ws?.readyState === WebSocket.OPEN) sende({ typ: "push_abmelden", endpoint });
+  push.laeuft = false;
+  zeigePush();
+}
+
+function pushTesten() {
+  if (!push.abo) return;
+  if (sende({ typ: "push_test", endpoint: push.abo.endpoint, verzoegerung_s: TEST_VERZOEGERUNG_S })) {
+    melde(IST_IOS ? `Kommt in ${TEST_VERZOEGERUNG_S} Sekunden. Sperr jetzt das iPhone.` : `Kommt in ${TEST_VERZOEGERUNG_S} Sekunden.`);
+  }
+}
+
+function zeigePush() {
+  const schalter = $("push-schalter");
+  const info = $("push-info");
+  const karte = $("pushkarte");
+  const kartenKnopf = $("pushkarte-knopf");
+  const karteWeg = speicher.lies("pushkarte", "") === "weg";
+
+  $("push-test-zeile").hidden = !push.abo;
+  schalter.hidden = false;
+  schalter.disabled = push.laeuft;
+  kartenKnopf.hidden = false;
+  kartenKnopf.disabled = push.laeuft || !push.schluessel || !push.reg;
+  karte.hidden = true;
+
+  if (!PUSH_MOEGLICH) {
+    schalter.hidden = true;
+    if (IST_IOS && !IST_APP) {
+      info.textContent = "Auf dem iPhone nur in der App vom Home-Bildschirm. In Safari: Teilen, Zum Home-Bildschirm, dann dort öffnen.";
+      $("pushkarte-text").textContent = "Für Mitteilungen in Safari: Teilen, Zum Home-Bildschirm";
+      kartenKnopf.hidden = true;
+      karte.hidden = karteWeg;
+    } else {
+      info.textContent = "In diesem Browser nicht verfügbar.";
+    }
+    return;
+  }
+
+  if (Notification.permission === "denied") {
+    schalter.textContent = "Blockiert";
+    schalter.disabled = true;
+    info.textContent = IST_IOS
+      ? "Blockiert. Erlauben in den iPhone-Einstellungen unter Mitteilungen, Türampel."
+      : "Im Browser blockiert. Freigeben in den Website-Einstellungen.";
+    return;
+  }
+
+  if (push.abo) {
+    schalter.textContent = "Ausschalten";
+    info.textContent = push.beimHub
+      ? "An. Anfragen kommen auch, wenn die App geschlossen ist."
+      : "An. Wird beim Hub angemeldet …";
+    return;
+  }
+
+  schalter.textContent = "Einschalten";
+  schalter.disabled = push.laeuft || !push.schluessel || !push.reg;
+  info.textContent = "Meldet Anfragen auch, wenn die App geschlossen ist.";
+  $("pushkarte-text").textContent = "Anfragen auch bei geschlossener App melden";
+  karte.hidden = karteWeg;
+}
 
 // ---------- Anfrage-Ansicht ----------
 
@@ -312,6 +473,20 @@ function empfange(text) {
       break;
     case "abbruch":
       if (anfrage?.id === n.id) anfrageSchliessen("Anfrage an der Tür abgebrochen");
+      break;
+    case "push_schluessel":
+      push.schluessel = n.schluessel;
+      zeigePush();
+      pushAbgleichen();
+      break;
+    case "push_status":
+      if (push.abo?.endpoint === n.endpoint) {
+        push.beimHub = n.aktiv;
+        zeigePush();
+      }
+      break;
+    case "push_ergebnis":
+      melde(n.ok ? "Test-Mitteilung ist raus" : `Test fehlgeschlagen: ${n.grund}`);
       break;
     case "fehler":
       melde(`Hub: ${n.grund}`);
@@ -447,25 +622,6 @@ function starteHaupt() {
   verbinden();
 }
 
-// ---------- Einstellungen ----------
-
-function zeigeBenachrichtigung() {
-  const knopf = $("benachrichtigung");
-  const info = $("benachrichtigung-info");
-  if (!("Notification" in window)) {
-    knopf.hidden = true;
-    info.textContent = "In diesem Browser nicht verfügbar. Auf dem iPhone kommt das mit den Push-Mitteilungen.";
-    return;
-  }
-  const erlaubt = Notification.permission === "granted";
-  const verboten = Notification.permission === "denied";
-  knopf.textContent = erlaubt ? "Erlaubt" : "Erlauben";
-  knopf.disabled = erlaubt || verboten;
-  info.textContent = verboten
-    ? "Im Browser blockiert. Freigeben kannst du sie in den Website-Einstellungen."
-    : "Erscheint, wenn die App im Hintergrund offen ist, etwa in einem anderen Tab am PC.";
-}
-
 // ---------- Start ----------
 
 function einrichten() {
@@ -507,15 +663,13 @@ function einrichten() {
     }, 120);
   });
 
-  $("benachrichtigung").addEventListener("click", async () => {
-    try {
-      await Notification.requestPermission();
-    } catch {
-      // egal
-    }
-    zeigeBenachrichtigung();
+  $("push-schalter").addEventListener("click", () => (push.abo ? pushAusschalten() : pushEinschalten()));
+  $("pushkarte-knopf").addEventListener("click", () => pushEinschalten());
+  $("pushkarte-weg").addEventListener("click", () => {
+    speicher.schreib("pushkarte", "weg");
+    zeigePush();
   });
-  zeigeBenachrichtigung();
+  $("push-test").addEventListener("click", pushTesten);
 
   $("abmelden").addEventListener("click", () => abmelden());
 
@@ -527,6 +681,10 @@ function einrichten() {
     if (document.visibilityState === "visible") {
       aufwachen();
       if (tonAn && !hinweis.bereit()) $("ton-hinweis").hidden = false;
+      // Ein Push hat die Zahl am App-Symbol gesetzt, jetzt ist sie gesehen.
+      if (!anfrage) navigator.clearAppBadge?.().catch(() => {});
+      // In den Einstellungen des Geräts kann sich etwas geändert haben.
+      pushLaden();
     } else if (IST_IOS) {
       // Am PC spielt der Ton auch im Hintergrund-Tab, auf dem iPhone nicht.
       hinweis.verwerfen();
@@ -540,6 +698,7 @@ function einrichten() {
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   }
+  pushLaden();
 
   if (schluessel) starteHaupt();
   else zeigeSeite("einrichtung");

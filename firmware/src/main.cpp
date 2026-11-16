@@ -9,6 +9,7 @@
 
 #include "config.h"
 #include "controller.h"
+#include "keepalive.h"
 #include "ota.h"
 #include "panel.h"
 
@@ -44,6 +45,7 @@ void setup() {
 
     beginLvglHelper(panel::device());
     controller::begin();
+    keepalive::begin();
 
     Serial.printf("Tuerampel %s gestartet, %u x %u\n", ota::version(), panel::device().width(),
                   panel::device().height());

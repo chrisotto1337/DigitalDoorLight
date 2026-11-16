@@ -88,6 +88,8 @@ eine saubere Fassung per Kabel draufkommt.
   bleibt das Display dunkel. Der erste Tipp weckt es für 10 Sekunden, erst der zweite
   fragt an. Während einer Anfrage bleibt es an.
 - Gegen Einbrennen wandert der Inhalt alle 2 Minuten um 4 Pixel.
+- Für den Betrieb an einer Powerbank zieht das Board alle 10 Sekunden für 1 Sekunde
+  mehr Strom, damit sie nicht abschaltet. Unsichtbar, auch nachts.
 - Bietet der Hub eine neue Firmware an, lädt das Display sie, sobald keine Anfrage
   läuft, und startet neu. Am Tag zeigt es dabei "Update" mit Fortschritt, nachts
   bleibt es dunkel. Erreicht die neue Firmware den Hub nicht binnen 5 Minuten, kehrt
@@ -109,6 +111,9 @@ eine saubere Fassung per Kabel draufkommt.
 - **Bleibt bei "Verbinde mit dem Hub":** Meist stimmt der Display-Schlüssel nicht.
   Der serielle Monitor zeigt dann wiederholt "[hub] getrennt".
 - **Fehler beim Bauen "secrets.h fehlt":** Schritt 3 unter "Firmware aufspielen".
+- **Powerbank schaltet trotzdem ab:** In `config.h` `KEEPALIVE_INTERVAL_MS` verkleinern
+  oder `KEEPALIVE_PULSE_MS` vergrößern, höchstens 3000. Manche Powerbanks verlangen mehr
+  Strom, als das Board ohne Display ziehen kann, dann hilft nur ein Netzteil.
 - **Zeigt "WLAN-Daten fehlen":** Das Board hat noch nie eine Firmware mit `secrets.h`
   bekommen. Einmal per Kabel aufspielen.
 - **Neues WLAN oder neuer Schlüssel:** `secrets.h` anpassen und einmal per Kabel
@@ -132,6 +137,7 @@ firmware/
   src/credentials.cpp   WLAN und Schlüssel im Flash des Boards
   src/ota.cpp           Update über WLAN mit Rückfall auf die alte Firmware
   src/panel.cpp         Display an, aus, Helligkeit
+  src/keepalive.cpp     Strompuls, der eine Powerbank wach hält
   src/ui.cpp, ui.h      Die Screens
   src/fonts/            Erzeugte Schriften und Icons
   lib/LilyGo_AMOLED/    Display- und Touch-Treiber des Herstellers

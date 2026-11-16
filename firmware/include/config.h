@@ -59,4 +59,13 @@ constexpr uint32_t OTA_RETRY_MS = 30UL * 60 * 1000;
 constexpr uint32_t OTA_VERIFY_TIMEOUT_MS = 5UL * 60 * 1000;
 constexpr uint8_t OTA_MAX_FAILURES = 3;
 
+// ---------- Powerbank ----------
+
+// Viele Powerbanks schalten ab, wenn wenig Strom fliesst. Das Board zieht
+// deshalb in diesem Takt kurz mehr Strom. Am Netzteil unnoetig: false.
+constexpr bool KEEPALIVE_ENABLED = true;
+// Schaltet die Powerbank trotzdem ab: Takt verkuerzen oder Puls verlaengern.
+constexpr uint32_t KEEPALIVE_INTERVAL_MS = 10000;
+constexpr uint32_t KEEPALIVE_PULSE_MS = 1000;
+
 }  // namespace config

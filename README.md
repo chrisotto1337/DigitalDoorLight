@@ -12,11 +12,11 @@ https://tuerampel-hub.chris-otto.workers.dev, die Testseite unter `/test`.
 Einrichtung und Betrieb: [hub/README.md](hub/README.md).
 Meilenstein 3 ist erledigt: Das Display hängt am Hub und zeigt den Status, den die App
 setzt.
-Meilenstein 4 und 5 sind gebaut: Die App läuft unter
-https://tuerampel-hub.chris-otto.workers.dev auf dem iPhone und im Browser am PC und
-beantwortet Anfragen. Der Test am iPhone steht aus.
-Meilenstein 6 ist gebaut: Anfragen kommen als Push-Mitteilung, auch bei geschlossener
-App. Einschalten: [hub/README.md](hub/README.md#mitteilungen).
+Meilenstein 4 bis 6 sind erledigt: Die App läuft unter
+https://tuerampel-hub.chris-otto.workers.dev auf dem iPhone und im Browser am PC,
+steuert die Ampel und beantwortet Anfragen. Anfragen kommen als Push-Mitteilung, auch
+bei geschlossener App. Einschalten: [hub/README.md](hub/README.md#mitteilungen).
+Am iPhone getestet am 16.11.2026.
 
 ![Die sechs Screens](docs/m1-screens.png)
 
@@ -33,9 +33,9 @@ ohne Verbindung.
 | M1 | Display zeigt alle Zustände | erledigt |
 | M2 | Cloud-Hub steht | erledigt |
 | M3 | Display hängt am Hub | erledigt |
-| M4 | iPhone-App steuert die Ampel | gebaut, Test am iPhone offen |
-| M5 | Anfrage bei offener App | gebaut, Test am iPhone offen |
-| M6 | Push-Mitteilung | gebaut, Test am iPhone offen |
+| M4 | iPhone-App steuert die Ampel | erledigt |
+| M5 | Anfrage bei offener App | erledigt |
+| M6 | Push-Mitteilung | erledigt |
 | M7 | Dauerbetrieb an der Tür | offen |
 | M8 | Akku als Puffer | offen |
 

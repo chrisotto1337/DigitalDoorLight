@@ -59,6 +59,7 @@ const char *version() {
 
 void begin() {
     const esp_partition_t *running = esp_ota_get_running_partition();
+    Serial.printf("[ota] Firmware %s auf %s\n", FIRMWARE_VERSION, running->label);
     esp_ota_img_states_t state;
     if (esp_ota_get_state_partition(running, &state) == ESP_OK &&
         state == ESP_OTA_IMG_PENDING_VERIFY) {

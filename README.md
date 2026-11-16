@@ -10,7 +10,8 @@ Meilenstein 1 von 8 ist erledigt: Das Display zeigt alle sechs Zustände, noch o
 Meilenstein 2 ist erledigt: Der Hub läuft unter
 https://tuerampel-hub.chris-otto.workers.dev, die Testseite unter `/test`.
 Einrichtung und Betrieb: [hub/README.md](hub/README.md).
-Meilenstein 3 ist gebaut: Das Display hängt am Hub. Der Test am Gerät steht aus.
+Meilenstein 3 ist erledigt: Das Display hängt am Hub und zeigt den Status, den die App
+setzt. Die Anfrage am Display aus M5 funktioniert schon, die App dazu kommt mit M4.
 
 ![Die sechs Screens](docs/m1-screens.png)
 
@@ -26,9 +27,9 @@ ohne Verbindung.
 | --- | --- | --- |
 | M1 | Display zeigt alle Zustände | erledigt |
 | M2 | Cloud-Hub steht | erledigt |
-| M3 | Display hängt am Hub | gebaut, Test am Gerät offen |
+| M3 | Display hängt am Hub | erledigt |
 | M4 | iPhone-App steuert die Ampel | offen |
-| M5 | Anfrage bei offener App | offen |
+| M5 | Anfrage bei offener App | Display-Seite fertig, App offen |
 | M6 | Push-Mitteilung | offen |
 | M7 | Dauerbetrieb an der Tür | offen |
 | M8 | Akku als Puffer | offen |

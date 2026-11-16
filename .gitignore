@@ -14,3 +14,6 @@ hub/.wrangler/
 hub/.dev.vars
 
 hub/.secrets.env
+
+# Firmware: WLAN-Daten und Display-Schluessel
+firmware/include/secrets.h

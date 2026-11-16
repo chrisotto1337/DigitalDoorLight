@@ -10,17 +10,23 @@ Meilenstein 1 von 8 ist erledigt: Das Display zeigt alle sechs Zustände, noch o
 Meilenstein 2 ist erledigt: Der Hub läuft unter
 https://tuerampel-hub.chris-otto.workers.dev, die Testseite unter `/test`.
 Einrichtung und Betrieb: [hub/README.md](hub/README.md).
+Meilenstein 3 ist gebaut: Das Display hängt am Hub. Der Test am Gerät steht aus.
 
 ![Die sechs Screens](docs/m1-screens.png)
 
 Das Bild stammt aus einem Rendering des Firmware-Codes am Rechner. Am Gerät
 getestet am 15.11.2026: Anzeige, Tipp und Countdown laufen.
 
+Neu in M3: Verbindungsaufbau, laufende Anfrage, keine Antwort und die Anzeige
+ohne Verbindung.
+
+![Neue Screens in M3](docs/m3-screens.png)
+
 | Nr. | Ziel | Stand |
 | --- | --- | --- |
 | M1 | Display zeigt alle Zustände | erledigt |
 | M2 | Cloud-Hub steht | erledigt |
-| M3 | Display hängt am Hub | offen |
+| M3 | Display hängt am Hub | gebaut, Test am Gerät offen |
 | M4 | iPhone-App steuert die Ampel | offen |
 | M5 | Anfrage bei offener App | offen |
 | M6 | Push-Mitteilung | offen |
@@ -38,20 +44,29 @@ getestet am 15.11.2026: Anzeige, Tipp und Countdown laufen.
    "PlatformIO IDE".
 2. Dieses Repository klonen und in VS Code den Ordner `firmware` öffnen, nicht das
    Hauptverzeichnis.
-3. Das Board per USB-C anschließen.
-4. In der PlatformIO-Leiste unten auf den Pfeil "Upload" klicken. Der erste Lauf
+3. Im Ordner `firmware/include` die Datei `secrets.example.h` kopieren, die Kopie
+   `secrets.h` nennen und darin WLAN-Name, WLAN-Passwort und den Display-Schlüssel
+   eintragen. Der Schlüssel ist derselbe wie im GitHub-Secret `HUB_DEVICE_KEY`.
+   `secrets.h` kommt nicht ins Repository.
+4. Das Board per USB-C anschließen.
+5. In der PlatformIO-Leiste unten auf den Pfeil "Upload" klicken. Der erste Lauf
    lädt Compiler und Bibliotheken und dauert einige Minuten.
 
 Auf der Kommandozeile geht dasselbe mit `pio run -t upload` im Ordner `firmware`.
 
-## Was M1 tut
+## Was die Firmware tut
 
-- Nach dem Start erscheint "Frei".
-- Ein Tipp irgendwo auf das Display schaltet zum nächsten Screen. Der BOOT-Taster
-  auf der Platine tut dasselbe.
-- Reihenfolge: Frei, Bitte fragen, Nicht stören, Anfrage läuft, Herein!, Jetzt nicht.
-- Auf "Anfrage läuft" zählt der Countdown 30 Sekunden herunter und schaltet am
-  Ende von selbst weiter.
+- Nach dem Start erscheint "Verbinde mit dem WLAN", dann "mit dem Hub". Sobald der
+  Hub antwortet, zeigt das Display den aktuellen Status.
+- Ändert die App oder die Testseite den Status, folgt das Display sofort.
+- Bei Gelb oder Rot schickt ein Tipp aufs Display eine Anfrage. Der BOOT-Taster auf
+  der Platine wirkt wie ein Tipp.
+- Während der Anfrage läuft ein Countdown von 30 Sekunden. "Abbrechen" unten bricht
+  sie ab, ein Tipp auf den Rest des Displays nicht.
+- Die Antwort erscheint als "Herein!" oder "Jetzt nicht", ohne Antwort als
+  "Keine Antwort". Nach 6 Sekunden oder einem Tipp kehrt das Display zum Status zurück.
+- Ohne Verbindung zeigt das Symbol oben rechts ein durchgestrichenes WLAN, das Feld
+  unten sagt "Offline, bitte klopfen". Die Verbindung baut sich von selbst neu auf.
 
 ## Wenn etwas nicht klappt
 
@@ -64,6 +79,11 @@ Auf der Kommandozeile geht dasselbe mit `pio run -t upload` im Ordner `firmware`
   "Display nicht erkannt", hat die Firmware das Board nicht als 1,91-Zoll-Touch-Modell
   erkannt.
 - **Zu hell oder zu dunkel:** `DISPLAY_BRIGHTNESS` in derselben Datei, 0 bis 255.
+- **Bleibt bei "Verbinde mit dem WLAN":** WLAN-Name und Passwort in `secrets.h`
+  prüfen. Der ESP32 kann nur 2,4 GHz, kein 5-GHz-WLAN.
+- **Bleibt bei "Verbinde mit dem Hub":** Meist stimmt der Display-Schlüssel nicht.
+  Der serielle Monitor zeigt dann wiederholt "[hub] getrennt".
+- **Fehler beim Bauen "secrets.h fehlt":** Schritt 3 unter "Firmware aufspielen".
 
 ## Aufbau des Repositories
 
@@ -71,10 +91,13 @@ Auf der Kommandozeile geht dasselbe mit `pio run -t upload` im Ordner `firmware`
 firmware/
   platformio.ini        Build-Konfiguration
   boards/               Board-Definition des Herstellers
-  include/config.h      Einstellungen: Ausrichtung, Helligkeit, Frist
+  include/config.h      Einstellungen: Ausrichtung, Helligkeit, Hub, Fristen
+  include/secrets.example.h  Vorlage für WLAN und Display-Schlüssel
   include/lv_conf.h     LVGL-Konfiguration
-  src/main.cpp          Start und Ablauf
-  src/ui.cpp, ui.h      Die sechs Screens
+  src/main.cpp          Start, BOOT-Taster
+  src/controller.cpp    Ablauf: Status, Anfrage, Antwort, Offline
+  src/hub_client.cpp    WLAN und WebSocket zum Hub
+  src/ui.cpp, ui.h      Die Screens
   src/fonts/            Erzeugte Schriften und Icons
   lib/LilyGo_AMOLED/    Display- und Touch-Treiber des Herstellers
   tools/make_fonts.sh   Erzeugt die Schriften neu
@@ -98,6 +121,8 @@ Die iPhone-App kommt mit M4 als eigener Ordner dazu.
 | [LVGL](https://github.com/lvgl/lvgl) 9.6.0 | MIT |
 | [LilyGo-AMOLED-Series](https://github.com/Xinyuan-LilyGO/LilyGo-AMOLED-Series), Kopie in `firmware/lib` | MIT |
 | [SensorLib](https://github.com/lewisxhe/SensorLib) 0.5.1 | MIT |
+| [arduinoWebSockets](https://github.com/links2004/arduinoWebSockets) 2.7.2 | LGPL 2.1 |
+| [ArduinoJson](https://github.com/bblanchon/ArduinoJson) 7.4.3 | MIT |
 | Schrift [Space Grotesk](https://github.com/floriankarsten/space-grotesk) | SIL Open Font License 1.1 |
 | Schrift [Inter](https://github.com/rsms/inter) | SIL Open Font License 1.1 |
 | [Tabler Icons](https://github.com/tabler/tabler-icons) | MIT |

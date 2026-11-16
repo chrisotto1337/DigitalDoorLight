@@ -1,36 +1,20 @@
-// Tuerampel, Meilenstein 1: das Display zeigt alle sechs Zustaende.
+// Tuerampel, Meilenstein 3: das Display haengt am Hub.
 //
-// Noch ohne WLAN und Hub. Ein Tipp auf das Display oder ein Druck auf den
-// BOOT-Taster schaltet zum naechsten Screen. Auf "Anfrage laeuft" zaehlt der
-// Countdown herunter und schaltet am Ende von selbst weiter.
+// Es zeigt den Status, den die App setzt. Ein Tipp bei Gelb oder Rot schickt
+// eine Anfrage, die Antwort erscheint auf dem Display. Ohne Verbindung zeigt
+// das Symbol oben rechts ein durchgestrichenes WLAN.
 
 #include <Arduino.h>
 #include <LV_Helper.h>
 #include <LilyGo_AMOLED.h>
 
 #include "config.h"
-#include "ui.h"
+#include "controller.h"
 
 static LilyGo_Class amoled;
 
-static uint32_t requestStartedMs = 0;
 static bool buttonWasDown = false;
 static uint32_t buttonChangedMs = 0;
-
-static void showScreen(ui::Screen screen) {
-    ui::show(screen);
-    if (screen == ui::Screen::Requesting) {
-        requestStartedMs = millis();
-        ui::setCountdown(config::REQUEST_TIMEOUT_MS, config::REQUEST_TIMEOUT_MS);
-    }
-    Serial.printf("Screen %u\n", static_cast<unsigned>(screen));
-}
-
-static void showNextScreen() {
-    const uint8_t next =
-        (static_cast<uint8_t>(ui::current()) + 1) % ui::SCREEN_COUNT;
-    showScreen(static_cast<ui::Screen>(next));
-}
 
 static void pollButton() {
     const bool down = digitalRead(config::BUTTON_PIN) == LOW;
@@ -39,22 +23,9 @@ static void pollButton() {
         buttonWasDown = down;
         buttonChangedMs = now;
         if (down) {
-            showNextScreen();
+            controller::tap();
         }
     }
-}
-
-static void updateCountdown() {
-    if (ui::current() != ui::Screen::Requesting) {
-        return;
-    }
-    const uint32_t elapsed = millis() - requestStartedMs;
-    if (elapsed >= config::REQUEST_TIMEOUT_MS) {
-        showNextScreen();
-        return;
-    }
-    ui::setCountdown(config::REQUEST_TIMEOUT_MS - elapsed,
-                     config::REQUEST_TIMEOUT_MS);
 }
 
 void setup() {
@@ -75,14 +46,14 @@ void setup() {
     amoled.setBrightness(config::DISPLAY_BRIGHTNESS);
 
     beginLvglHelper(amoled);
-    ui::init(showNextScreen);
+    controller::begin();
 
-    Serial.printf("Tuerampel M1 gestartet, %u x %u\n", amoled.width(), amoled.height());
+    Serial.printf("Tuerampel M3 gestartet, %u x %u\n", amoled.width(), amoled.height());
 }
 
 void loop() {
     pollButton();
-    updateCountdown();
+    controller::loop();
     lv_timer_handler();
     delay(5);
 }

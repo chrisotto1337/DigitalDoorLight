@@ -20,6 +20,7 @@ constexpr uint32_t COLOR_RED        = 0xE5372C;
 constexpr uint32_t COLOR_ON_GREEN   = 0x04210F;
 constexpr uint32_t COLOR_ON_YELLOW  = 0x1F1600;
 constexpr uint32_t COLOR_ON_RED     = 0xFFFFFF;
+constexpr uint32_t COLOR_ON_STATUS  = 0x111417;
 
 // Masse aus dem Entwurf (240 x 536)
 constexpr int32_t PADDING       = 16;
@@ -42,7 +43,13 @@ struct ScreenSpec {
     bool countdown;
 };
 
+constexpr uint8_t SCREEN_COUNT = 8;
+
+// Reihenfolge wie in ui::Screen
 const ScreenSpec SPECS[SCREEN_COUNT] = {
+    // Connecting
+    {ICON_WIFI, false, 0, COLOR_STATUS, 0,
+     "Verbinde", &font_title_46, 0, "mit dem WLAN", nullptr, 0, false},
     // Free
     {ICON_CHECK, true, 184, COLOR_GREEN, COLOR_ON_GREEN,
      "Frei", &font_title_64, 0, "Komm rein", nullptr, 0, false},
@@ -64,7 +71,12 @@ const ScreenSpec SPECS[SCREEN_COUNT] = {
     // Denied
     {ICON_X, true, 176, COLOR_RED, COLOR_ON_RED,
      "Jetzt\nnicht", &font_title_46, -12, "Später nochmal", nullptr, 0, false},
+    // NoAnswer
+    {ICON_CLOCK, true, 176, COLOR_STATUS, COLOR_ON_STATUS,
+     "Keine\nAntwort", &font_title_46, -12, "Bitte klopfen", nullptr, 0, false},
 };
+static_assert(static_cast<uint8_t>(Screen::NoAnswer) + 1 == SCREEN_COUNT,
+              "SPECS passt nicht zu ui::Screen");
 
 lv_obj_t *statusIcon     = nullptr;
 lv_obj_t *disc           = nullptr;
@@ -77,9 +89,19 @@ lv_obj_t *countdownLabel = nullptr;
 lv_obj_t *footer         = nullptr;
 lv_obj_t *footerLabel    = nullptr;
 
-Screen currentScreen   = Screen::Free;
+Screen currentScreen   = Screen::Connecting;
 TapHandler tapHandler  = nullptr;
 uint32_t shownSeconds  = UINT32_MAX;
+const char *connectingDetail = "mit dem WLAN";
+bool isOnline = false;
+
+// Ohne Hub kann das Display nicht anfragen, das Feld unten sagt es.
+const char *footerText(Screen screen, const ScreenSpec &spec) {
+    if (!isOnline && (screen == Screen::Ask || screen == Screen::Busy)) {
+        return "Offline, bitte klopfen";
+    }
+    return spec.footer;
+}
 
 // Ein reiner Layout-Behaelter: unsichtbar, nicht scrollbar, laesst Tipps durch.
 lv_obj_t *makeBox(lv_obj_t *parent) {
@@ -100,7 +122,13 @@ lv_obj_t *makeLabel(lv_obj_t *parent, const lv_font_t *font, uint32_t color) {
 
 void onScreenClicked(lv_event_t *) {
     if (tapHandler != nullptr) {
-        tapHandler();
+        tapHandler(Tap::Screen);
+    }
+}
+
+void onFooterClicked(lv_event_t *) {
+    if (tapHandler != nullptr) {
+        tapHandler(Tap::Footer);
     }
 }
 
@@ -173,10 +201,16 @@ void init(TapHandler onTap) {
     lv_obj_set_style_radius(footer, 16, 0);
     lv_obj_set_style_border_width(footer, 2, 0);
     lv_obj_set_style_border_opa(footer, LV_OPA_COVER, 0);
+    // Eigene Tippflaeche, damit "Abbrechen" nicht versehentlich ausgeloest wird.
+    lv_obj_set_clickable(footer, true);
+    lv_obj_set_style_bg_color(footer, lv_color_hex(COLOR_TEXT), LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(footer, LV_OPA_20, LV_STATE_PRESSED);
+    lv_obj_add_event_cb(footer, onFooterClicked, LV_EVENT_CLICKED, nullptr);
     footerLabel = makeLabel(footer, &font_text_17, COLOR_TEXT);
     lv_obj_center(footerLabel);
 
-    show(Screen::Free);
+    setOnline(false);
+    show(Screen::Connecting);
 }
 
 void show(Screen screen) {
@@ -198,7 +232,8 @@ void show(Screen screen) {
     lv_obj_set_style_text_font(title, spec.titleFont, 0);
     lv_obj_set_style_text_line_space(title, spec.titleLineSpace, 0);
     lv_label_set_text(title, spec.title);
-    lv_label_set_text(subtitle, spec.subtitle);
+    lv_label_set_text(subtitle,
+                      screen == Screen::Connecting ? connectingDetail : spec.subtitle);
 
     lv_obj_set_hidden(bar, !spec.countdown);
     lv_obj_set_hidden(countdownLabel, !spec.countdown);
@@ -211,7 +246,7 @@ void show(Screen screen) {
     lv_obj_set_hidden(footer, spec.footer == nullptr);
     if (spec.footer != nullptr) {
         lv_obj_set_style_border_color(footer, lv_color_hex(spec.footerBorder), 0);
-        lv_label_set_text(footerLabel, spec.footer);
+        lv_label_set_text(footerLabel, footerText(screen, spec));
     }
 }
 
@@ -243,7 +278,19 @@ void setCountdown(uint32_t remainingMs, uint32_t totalMs) {
 }
 
 void setOnline(bool online) {
+    isOnline = online;
     lv_label_set_text(statusIcon, online ? ICON_WIFI : ICON_WIFI_OFF);
+    const ScreenSpec &spec = SPECS[static_cast<uint8_t>(currentScreen)];
+    if (spec.footer != nullptr) {
+        lv_label_set_text(footerLabel, footerText(currentScreen, spec));
+    }
+}
+
+void setConnectingDetail(const char *text) {
+    connectingDetail = text;
+    if (currentScreen == Screen::Connecting) {
+        lv_label_set_text(subtitle, text);
+    }
 }
 
 }  // namespace ui
